@@ -4,6 +4,7 @@ const CONFIG = Object.freeze({
   siteUrl: 'https://daily-tech-observer.breezy-spool-0232.chatgpt.site',
   maxBytes: 500000,
   maxRunMs: 240000,
+  maxFailures: 10,
 });
 
 /** 首次手动运行：同步通过后安装一个每 15 分钟执行的 Google 定时触发器。 */
@@ -22,7 +23,7 @@ function syncDriveReports() {
   if (!lock.tryLock(1000)) return {skipped: 'another_run_in_progress'};
   const started = Date.now();
   const props = PropertiesService.getScriptProperties();
-  const result = {created: 0, updated: 0, unchanged: 0, failed: 0};
+  const result = {created: 0, updated: 0, unchanged: 0, failed: 0, failures: []};
   try {
     const access = props.getProperty('SITE_SERVICE_TOKEN');
     if (!access) throw new Error('请先在脚本属性设置 SITE_SERVICE_TOKEN。不要把凭证写进源代码或日志。');
@@ -50,8 +51,11 @@ function syncDriveReports() {
         props.setProperty(key, stamp);
         result[record.status === 'created' ? 'created' : record.status === 'updated' ? 'updated' : 'unchanged']++;
       } catch (e) {
+        const reason = String(e.message || '未知错误');
         result.failed++;
-        console.error('文件 ' + file.getId() + ' 同步失败：' + String(e.message || '未知错误'));
+        // 失败明细随回执上报，站点同步面板直接列出；超过上限的只计数。
+        if (result.failures.length < CONFIG.maxFailures) result.failures.push({fileId: file.getId(), name: file.getName().slice(0, 200), reason: reason.slice(0, 300)});
+        console.error('文件 ' + file.getId() + ' 同步失败：' + reason);
       }
       if (Date.now() - started > CONFIG.maxRunMs) { props.setProperty('DRIVE_SCAN_CURSOR', files.getContinuationToken()); break; }
     }
@@ -69,8 +73,17 @@ function siteRequest_(path, method, token, payload) {
   if (payload) { options.contentType = 'application/json'; options.payload = JSON.stringify(payload); }
   const response = UrlFetchApp.fetch(CONFIG.siteUrl + path, options);
   const code = response.getResponseCode();
-  if (code !== 200) throw new Error('站点返回 HTTP ' + code + '；凭证或访问范围可能需要检查。');
+  if (code !== 200) throw new Error('站点返回 HTTP ' + code + '：' + siteErrorMessage_(response, code));
   return method === 'get' ? response.getContentText('UTF-8') : JSON.parse(response.getContentText('UTF-8'));
+}
+
+/** 站点的错误体是 {error}，可直接展示；拿不到时按状态码给出排查方向。 */
+function siteErrorMessage_(response, code) {
+  try {
+    const body = JSON.parse(response.getContentText('UTF-8'));
+    if (body && typeof body.error === 'string' && body.error) return body.error;
+  } catch (_) { /* 非 JSON（如入口拦截页） */ }
+  return code === 401 || code === 403 ? '凭证或访问范围可能需要检查。' : '请稍后重试。';
 }
 
 function extractReportDate_(name, raw) {
@@ -92,7 +105,7 @@ function sha256_(raw) {
 function disableSync() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'syncDriveReports').forEach(t => ScriptApp.deleteTrigger(t));
   const access = PropertiesService.getScriptProperties().getProperty('SITE_SERVICE_TOKEN');
-  if (access) recordRun_(access, {created:0,updated:0,unchanged:0,failed:0});
+  if (access) recordRun_(access, {created:0,updated:0,unchanged:0,failed:0,failures:[]});
   console.log('拾讯自动同步已停用；其他脚本与触发器保持不变。');
 }
 

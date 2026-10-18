@@ -56,6 +56,13 @@ export interface Section {
 
 export type SyncStateName = 'awaiting_setup' | 'active' | 'stale' | 'attention' | 'disabled';
 
+/** 某个 Drive 文件同步失败的原因，由 Apps Script 上报。 */
+export interface SyncFailure {
+  fileId: string;
+  name: string;
+  reason: string;
+}
+
 export interface SyncState {
   mode: 'google-apps-script';
   state: SyncStateName;
@@ -65,6 +72,8 @@ export interface SyncState {
   updated: number;
   unchanged: number;
   failed: number;
+  /** 最近一轮失败文件的明细（最多 MAX_SYNC_FAILURES 条）；旧版脚本不上报时为空。 */
+  failures: SyncFailure[];
   legacyWriterDisabled: true;
 }
 
@@ -76,6 +85,7 @@ export interface SyncRunInput {
   updated?: number;
   unchanged?: number;
   failed?: number;
+  failures?: SyncFailure[];
 }
 
 /** 校验通过的运行回执；未上报的计数按 0 计。 */
@@ -86,6 +96,7 @@ export interface ValidatedSyncRun {
   updated: number;
   unchanged: number;
   failed: number;
+  failures: SyncFailure[];
 }
 
 /** 导入请求体（手动导入与程序同步共用）。 */

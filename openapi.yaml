@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.0.0
+  version: 3.1.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -123,7 +123,10 @@ paths:
               schema: {$ref: '#/components/schemas/SyncState'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
-      summary: Record Google runtime trigger state and run counters behind private ingress
+      summary: Record Google runtime trigger state, run counters and failed files behind private ingress
+      description: |
+        Each write also deletes receipts older than 30 days. `failures` lists at most 10 failed files; names
+        and reasons longer than 200 / 300 characters are truncated. More failures than `failed` is rejected.
       parameters:
         - {in: header, name: X-Sites-Report-Sync, required: true, schema: {type: string, enum: [google-apps-script]}}
       requestBody:
@@ -139,7 +142,7 @@ paths:
               schema: {$ref: '#/components/schemas/SyncState'}
         '400': {$ref: '#/components/responses/Invalid'}
         '403': {$ref: '#/components/responses/Error'}
-        '413': {description: State body larger than 4096 bytes, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '413': {description: State body larger than 16384 bytes, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '503': {$ref: '#/components/responses/Unavailable'}
   /api/integration/setup-credential:
     post:
@@ -259,9 +262,17 @@ components:
         updated: {type: integer, minimum: 0, maximum: 10000}
         unchanged: {type: integer, minimum: 0, maximum: 10000}
         failed: {type: integer, minimum: 0, maximum: 10000}
+        failures: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/SyncFailure'}}
+    SyncFailure:
+      type: object
+      required: [fileId, name, reason]
+      properties:
+        fileId: {type: string, pattern: '^[A-Za-z0-9_-]{10,150}$', description: Google Drive file id}
+        name: {type: string, maxLength: 200}
+        reason: {type: string, maxLength: 300, description: Human-readable, safe to display}
     SyncState:
       type: object
-      required: [mode, state, lastCheckedAt, triggerInstalled, created, updated, unchanged, failed, legacyWriterDisabled]
+      required: [mode, state, lastCheckedAt, triggerInstalled, created, updated, unchanged, failed, failures, legacyWriterDisabled]
       properties:
         mode: {type: string, const: google-apps-script}
         state: {type: string, enum: [awaiting_setup, active, stale, attention, disabled]}
@@ -271,6 +282,7 @@ components:
         updated: {type: integer}
         unchanged: {type: integer}
         failed: {type: integer}
+        failures: {type: array, items: {$ref: '#/components/schemas/SyncFailure'}, description: Failed files from the latest receipt; empty for older scripts}
         legacyWriterDisabled: {type: boolean, const: true}
     ReportsResponse:
       type: object

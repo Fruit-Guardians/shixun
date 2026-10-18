@@ -60,6 +60,8 @@ export const syncRuns = sqliteTable(
     updated: integer('updated_count').notNull().default(0),
     unchanged: integer('unchanged_count').notNull().default(0),
     failed: integer('failed_count').notNull().default(0),
+    /** JSON 数组：SyncFailure[]。 */
+    failures: text('failures').notNull().default('[]'),
   },
   (table) => [index('sync_runs_received_at_idx').on(table.receivedAt)],
 );

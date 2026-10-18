@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ORIGIN, PROGRAM_HEADERS, USER_HEADERS, createHarness, sampleRaw } from './helpers/harness.ts';
-import type { SyncState } from '#shared';
+import { MAX_SYNC_FAILURE_REASON_CHARS, MAX_SYNC_FAILURES, SYNC_RUN_RETENTION_MS } from '#shared';
+import type { ReportsResponse, SyncState } from '#shared';
 
 const FILE_ID = '1AA9Z4C-qdLryYO4Vwsr5cvaqfkt1nrsX';
 const payload = { raw: sampleRaw, date: '2026-10-16', topic: '全球技术社区', sourceFileId: FILE_ID };
@@ -55,8 +56,60 @@ test('sync status rejects malformed receipts and non-program callers', async () 
   assert.equal((await post({ triggerInstalled: false, failed: -1 })).status, 400);
   assert.equal((await post({ triggerInstalled: false, created: 1.5 })).status, 400);
   assert.equal((await post({}, {})).status, 403);
-  const big = await h.call('/api/sync/status', { method: 'POST', body: JSON.stringify({ triggerInstalled: true, pad: 'x'.repeat(5000) }), headers: PROGRAM_HEADERS });
+  const big = await h.call('/api/sync/status', { method: 'POST', body: JSON.stringify({ triggerInstalled: true, pad: 'x'.repeat(17_000) }), headers: PROGRAM_HEADERS });
   assert.equal(big.status, 413);
+});
+
+test('failure details are stored with the receipt and shown until a clean run', async () => {
+  const h = createHarness();
+  const post = (json: unknown) => h.call('/api/sync/status', { method: 'POST', json, headers: PROGRAM_HEADERS });
+  const failures = [
+    { fileId: FILE_ID, name: '  2026-10-17_全球技术社区.md ', reason: '站点返回 HTTP 400：正文过短，请导入完整日报。' },
+    { fileId: '1BB9Z4C-qdLryYO4Vwsr5cvaqfkt1nrsY', name: 'long.md', reason: '原'.repeat(MAX_SYNC_FAILURE_REASON_CHARS + 50) },
+  ];
+  const recorded = (await (await post({ triggerInstalled: true, failed: 3, failures })).json()) as SyncState;
+  assert.equal(recorded.state, 'attention');
+  assert.equal(recorded.failures.length, 2);
+  assert.equal(recorded.failures[0].name, '2026-10-17_全球技术社区.md');
+  assert.equal(recorded.failures[1].reason.length, MAX_SYNC_FAILURE_REASON_CHARS);
+  assert.ok(recorded.failures[1].reason.endsWith('…'));
+  assert.deepEqual(((await (await h.call('/api/sync/status')).json()) as SyncState).failures, recorded.failures);
+  assert.deepEqual(((await (await h.call('/api/reports')).json()) as ReportsResponse).sync.failures, recorded.failures);
+
+  const clean = (await (await post({ triggerInstalled: true, unchanged: 4 })).json()) as SyncState;
+  assert.deepEqual([clean.state, clean.failures], ['active', []]);
+});
+
+test('failure details are validated', async () => {
+  const h = createHarness();
+  const post = (failures: unknown, failed = 20) =>
+    h.call('/api/sync/status', { method: 'POST', json: { triggerInstalled: true, failed, failures }, headers: PROGRAM_HEADERS });
+  const one = { fileId: FILE_ID, name: 'a.md', reason: 'x' };
+  assert.equal((await post([one])).status, 200);
+  assert.equal((await post(Array(MAX_SYNC_FAILURES).fill(one))).status, 200);
+  assert.equal((await post(Array(MAX_SYNC_FAILURES + 1).fill(one))).status, 400);
+  assert.equal((await post([one, one], 1)).status, 400);
+  assert.equal((await post('nope')).status, 400);
+  assert.equal((await post([{ ...one, fileId: '../x' }])).status, 400);
+  assert.equal((await post([{ fileId: FILE_ID }])).status, 400);
+  const blank = (await (await post([{ ...one, reason: '  ' }])).json()) as SyncState;
+  assert.equal(blank.failures[0].reason, '未知错误');
+});
+
+test('receipts older than the retention window are pruned on write', async () => {
+  let now = new Date('2026-09-01T00:00:00Z');
+  const h = createHarness({}, { now: () => now });
+  const post = () => h.call('/api/sync/status', { method: 'POST', json: { triggerInstalled: true }, headers: PROGRAM_HEADERS });
+  await post();
+  now = new Date('2026-09-20T00:00:00Z');
+  await post();
+  const count = () => (h.DB.raw.prepare('SELECT count(*) AS n FROM sync_runs').get() as { n: number }).n;
+  assert.equal(count(), 2);
+  now = new Date(Date.parse('2026-09-01T00:00:00Z') + SYNC_RUN_RETENTION_MS + 1);
+  await post();
+  assert.equal(count(), 2);
+  const oldest = h.DB.raw.prepare('SELECT min(received_at) AS t FROM sync_runs').get() as { t: string };
+  assert.equal(oldest.t, '2026-09-20T00:00:00.000Z');
 });
 
 test('stale receipts older than an hour are reported as stale', async () => {

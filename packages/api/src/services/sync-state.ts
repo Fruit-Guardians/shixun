@@ -1,4 +1,4 @@
-import { SYNC_STALE_MS, validateSyncRun } from '#shared';
+import { SYNC_RUN_RETENTION_MS, SYNC_STALE_MS, validateSyncRun } from '#shared';
 import type { SyncState } from '#shared';
 import { insertSyncRun, latestSyncRun } from '../repositories/sync-runs.ts';
 
@@ -11,6 +11,7 @@ const EMPTY: SyncState = {
   updated: 0,
   unchanged: 0,
   failed: 0,
+  failures: [],
   legacyWriterDisabled: true,
 };
 
@@ -29,12 +30,14 @@ export async function getSyncState(db: D1Database, now: Date): Promise<SyncState
     updated: run.updated,
     unchanged: run.unchanged,
     failed: run.failed,
+    failures: run.failures,
   };
 }
 
 export async function recordSyncRun(db: D1Database, input: unknown, now: Date): Promise<SyncState> {
   const run = validateSyncRun(input);
   const receivedAt = now.toISOString();
-  await insertSyncRun(db, { ...run, receivedAt, checkedAt: run.checkedAt ?? receivedAt });
+  const pruneBefore = new Date(now.getTime() - SYNC_RUN_RETENTION_MS).toISOString();
+  await insertSyncRun(db, { ...run, receivedAt, checkedAt: run.checkedAt ?? receivedAt }, pruneBefore);
   return getSyncState(db, now);
 }

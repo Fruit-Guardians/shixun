@@ -1,6 +1,15 @@
-import { DEFAULT_TOPIC, MAX_REPORT_BYTES, MAX_SYNC_COUNT, MIN_REPORT_CHARS, TOPICS } from './constants.ts';
+import {
+  DEFAULT_TOPIC,
+  MAX_REPORT_BYTES,
+  MAX_SYNC_COUNT,
+  MAX_SYNC_FAILURE_NAME_CHARS,
+  MAX_SYNC_FAILURE_REASON_CHARS,
+  MAX_SYNC_FAILURES,
+  MIN_REPORT_CHARS,
+  TOPICS,
+} from './constants.ts';
 import { ValidationError } from './errors.ts';
-import type { ReportTopic, ValidatedImport, ValidatedSyncRun } from './types.ts';
+import type { ReportTopic, SyncFailure, ValidatedImport, ValidatedSyncRun } from './types.ts';
 
 const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{10,150}$/;
 const encoder = new TextEncoder();
@@ -76,5 +85,24 @@ export function validateSyncRun(input: unknown): ValidatedSyncRun {
     counts[key] = n;
   }
   const checkedAt = typeof input.checkedAt === 'string' && !Number.isNaN(Date.parse(input.checkedAt)) ? input.checkedAt : null;
-  return { triggerInstalled: input.triggerInstalled, checkedAt, ...counts };
+  const failures = validateFailures(input.failures);
+  if (failures.length > counts.failed) throw new ValidationError('失败明细多于失败计数。');
+  return { triggerInstalled: input.triggerInstalled, checkedAt, ...counts, failures };
+}
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/** 失败明细：省略即为空；文件 ID 必须是 Drive ID，文件名与原因过长时截断而不是拒绝。 */
+function validateFailures(input: unknown): SyncFailure[] {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input) || input.length > MAX_SYNC_FAILURES) throw new ValidationError(`失败明细最多 ${MAX_SYNC_FAILURES} 条。`);
+  return input.map((item) => {
+    if (!isRecord(item) || typeof item.fileId !== 'string' || !DRIVE_FILE_ID.test(item.fileId)) throw new ValidationError('失败明细的文件 ID 无效。');
+    if (typeof item.name !== 'string' || typeof item.reason !== 'string') throw new ValidationError('失败明细缺少文件名或原因。');
+    return {
+      fileId: item.fileId,
+      name: clip(item.name.trim(), MAX_SYNC_FAILURE_NAME_CHARS),
+      reason: clip(item.reason.trim() || '未知错误', MAX_SYNC_FAILURE_REASON_CHARS),
+    };
+  });
 }

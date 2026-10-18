@@ -66,6 +66,19 @@ function SyncPanel({ api, sync, onRefresh }: Omit<SyncDialogProps, 'open' | 'onO
             ? `最近回执：${new Date(sync.lastCheckedAt).toLocaleString('zh-CN')} · 新增 ${sync.created} / 更新 ${sync.updated} / 未变 ${sync.unchanged} / 失败 ${sync.failed}`
             : '接收端已就绪；尚未收到 Google 脚本的真实运行回执。完成下面的一次性设置后，才会显示运行中。'}
         </p>
+        {sync && sync.failures.length > 0 && (
+          <ul className="sync-failures" aria-label="最近一轮失败的文件">
+            {sync.failures.map((f) => (
+              <li key={f.fileId}>
+                <a href={`https://drive.google.com/file/d/${encodeURIComponent(f.fileId)}/view`} target="_blank" rel="noopener noreferrer">
+                  {f.name || f.fileId}
+                </a>
+                <span>{f.reason}</span>
+              </li>
+            ))}
+            {sync.failed > sync.failures.length && <li className="dim">另有 {sync.failed - sync.failures.length} 个文件失败，详见 Apps Script 执行日志。</li>}
+          </ul>
+        )}
         <button className="text-button" onClick={onRefresh}>
           <RefreshCw size={14} />
           刷新状态

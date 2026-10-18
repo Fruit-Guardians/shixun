@@ -11,9 +11,16 @@ export const MIN_REPORT_CHARS = 100;
 export const MAX_REPORT_BYTES = 500_000;
 /** 请求体上限（含 JSON 包装），略大于正文上限。 */
 export const MAX_BODY_BYTES = 600_000;
-/** 同步状态回执的请求体字节上限。 */
-export const MAX_STATUS_BODY_BYTES = 4_096;
+/** 同步状态回执的请求体字节上限（含最多 MAX_SYNC_FAILURES 条失败明细）。 */
+export const MAX_STATUS_BODY_BYTES = 16_384;
 export const MAX_SYNC_COUNT = 10_000;
+/** 一次回执最多携带的失败明细条数；更多的只计入 failed。 */
+export const MAX_SYNC_FAILURES = 10;
+/** 失败明细里文件名与原因的字符上限，超出部分截断。 */
+export const MAX_SYNC_FAILURE_NAME_CHARS = 200;
+export const MAX_SYNC_FAILURE_REASON_CHARS = 300;
+/** 同步回执保留时长；更早的在写入新回执时清理。 */
+export const SYNC_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 /** 超过该时长没有收到 Google 脚本回执，同步状态记为「延迟」。 */
 export const SYNC_STALE_MS = 60 * 60 * 1000;
 

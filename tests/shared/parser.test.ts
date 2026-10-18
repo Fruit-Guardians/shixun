@@ -72,6 +72,7 @@ test('sync run receipts default missing counts and drop unparseable timestamps',
     updated: 0,
     unchanged: 0,
     failed: 0,
+    failures: [],
   });
   assert.throws(() => validateSyncRun([]), ValidationError);
   assert.throws(() => validateSyncRun({ triggerInstalled: true, failed: 10_001 }), ValidationError);

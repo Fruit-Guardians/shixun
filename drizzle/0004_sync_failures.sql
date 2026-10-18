@@ -1,0 +1,1 @@
+ALTER TABLE `sync_runs` ADD `failures` text DEFAULT '[]' NOT NULL;

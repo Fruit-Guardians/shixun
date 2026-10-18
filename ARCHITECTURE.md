@@ -43,7 +43,8 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 查询约定：
 - 单篇下载（Apps Script 每个文件回读一次）只按 id 查一行，不加载整个归档。
 - 写入新版本时，旧版本在库内用 `INSERT … SELECT` 复制进 `report_versions`，全文不经过 Worker。
-- `sync_runs` 每 15 分钟一行，最新回执走 `sync_runs_received_at_idx` 索引。
+- `sync_runs` 每 15 分钟一行，最新回执走 `sync_runs_received_at_idx` 索引；每次写入新回执时在同一个 batch 里删掉 30 天（`SYNC_RUN_RETENTION_MS`）以前的旧行，表大小保持在约 3 000 行。
+- 回执带最近一轮失败文件的明细（`failures`，最多 10 条：文件 ID、文件名、原因），存为 JSON 列，同步面板直接列出；旧版脚本不上报时为空。
 
 列表与全文分离：
 - `GET /api/reports` 只返回元数据（`ReportSummary`：字数 `chars`、链接数 `links`）和每期的条目摘要（标题、摘要、标签），不含原文 `raw` 和条目正文 `body`。阅读页按需请求 `GET /api/reports/{id}` 取原文。

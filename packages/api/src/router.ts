@@ -58,6 +58,9 @@ export class Router {
   post(pattern: string, handler: Handler) {
     return this.add('POST', pattern, handler);
   }
+  delete(pattern: string, handler: Handler) {
+    return this.add('DELETE', pattern, handler);
+  }
 
   resolve(method: string, pathname: string): { handler: Handler; params: Record<string, string> } {
     const actual = split(pathname);

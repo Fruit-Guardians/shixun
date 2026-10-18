@@ -24,6 +24,9 @@ export const SYNC_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 /** 超过该时长没有收到 Google 脚本回执，同步状态记为「延迟」。 */
 export const SYNC_STALE_MS = 60 * 60 * 1000;
 
+/** 版本历史一次最多列出的条数（最新的在前）。 */
+export const MAX_LISTED_VERSIONS = 50;
+
 /** 搜索词的字符上限。 */
 export const MAX_SEARCH_CHARS = 100;
 
@@ -42,6 +45,10 @@ export const apiPaths = {
   health: '/api/health',
   reports: '/api/reports',
   report: (id: string) => `/api/reports/${encodeURIComponent(id)}`,
+  reportVersions: (id: string) => `/api/reports/${encodeURIComponent(id)}/versions`,
+  reportVersion: (id: string, versionId: string) => `/api/reports/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`,
+  restoreVersion: (id: string, versionId: string) =>
+    `/api/reports/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
   search: '/api/search',
   sync: '/api/sync',
   syncStatus: '/api/sync/status',

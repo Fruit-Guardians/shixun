@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, Info, Link2 } from "lucide-react";
+import { ArrowLeft, FileText, History, Info, Link2 } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { sectionsFor } from "#shared";
 import type { ReportSummary } from "#shared";
@@ -14,6 +14,7 @@ interface ReaderViewProps {
   downloadUrl: string;
   onBack: () => void;
   onCopyLink: (id: string) => void;
+  onOpenVersions: () => void;
 }
 
 export default function ReaderView({
@@ -22,6 +23,7 @@ export default function ReaderView({
   downloadUrl,
   onBack,
   onCopyLink,
+  onOpenVersions,
 }: ReaderViewProps) {
   const content = useRef<HTMLElement>(null);
   const { bar, activeSection } = useReadingProgress(content);
@@ -48,6 +50,10 @@ export default function ReaderView({
             <FileText size={14} />
             <span>下载原文 .md</span>
           </a>
+          <button className="outline-button" onClick={onOpenVersions}>
+            <History size={14} />
+            <span>版本</span>
+          </button>
         </div>
       </div>
       <div className="reading-layout">

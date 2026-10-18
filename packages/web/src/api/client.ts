@@ -1,5 +1,14 @@
 import { apiPaths } from '#shared';
-import type { ApiErrorBody, ImportRequest, IngestResult, ReportsResponse, SearchResponse, SetupCredentialResponse } from '#shared';
+import type {
+  ApiErrorBody,
+  DeleteReportResponse,
+  ImportRequest,
+  IngestResult,
+  ReportVersionsResponse,
+  ReportsResponse,
+  SearchResponse,
+  SetupCredentialResponse,
+} from '#shared';
 
 /** 后端返回的错误，或网络层失败（status = 0）。 message 可直接展示给用户。 */
 export class ApiError extends Error {
@@ -70,6 +79,20 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
     async importReport(input: ImportRequest): Promise<IngestResult> {
       return (await postJson(apiPaths.reports, input)) as IngestResult;
     },
+    /** 当前版本与历史版本的元数据。 */
+    async listVersions(id: string, signal?: AbortSignal): Promise<ReportVersionsResponse> {
+      const data = await request<Partial<ReportVersionsResponse>>(apiPaths.reportVersions(id), { signal });
+      if (!data || !data.current || !Array.isArray(data.versions)) throw new ApiError('版本历史返回格式异常。', 200, 'bad_response');
+      return data as ReportVersionsResponse;
+    },
+    /** 所有者把某个历史版本恢复为当前版本（作为新版本写入）。 */
+    async restoreVersion(id: string, versionId: string): Promise<IngestResult> {
+      return (await postJson(apiPaths.restoreVersion(id, versionId), {})) as IngestResult;
+    },
+    /** 所有者删除一期；当前版本仍保留在库内历史里。 */
+    async deleteReport(id: string): Promise<DeleteReportResponse> {
+      return request<DeleteReportResponse>(apiPaths.report(id), { method: 'DELETE' });
+    },
     async setupCredential(): Promise<string> {
       const data = (await postJson(apiPaths.setupCredential, {})) as Partial<SetupCredentialResponse>;
       if (!data.token) throw new ApiError('凭证尚未配置', 503, 'not_configured');
@@ -77,6 +100,8 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
     },
     /** 原文下载地址；用于 <a href>，不发请求。 */
     reportUrl: (id: string): string => baseUrl + apiPaths.report(id),
+    /** 历史版本下载地址。 */
+    versionUrl: (id: string, versionId: string): string => baseUrl + apiPaths.reportVersion(id, versionId),
   };
 }
 

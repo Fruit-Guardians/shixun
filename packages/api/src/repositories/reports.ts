@@ -1,4 +1,4 @@
-import type { Report, ReportDigest, ReportTopic, StorySummary } from '#shared';
+import type { Report, ReportDigest, ReportTopic, ReportVersion, StorySummary } from '#shared';
 
 /** reports / report_stories 的 SQL 全在这里。列名显式列出，列表路径从不读取原文。 */
 
@@ -167,13 +167,13 @@ export interface ReportWrite {
   source: string;
   sourceFileId: string | null;
   importedAt: string;
-  revision: number;
 }
 
 const ARCHIVE_PREVIOUS = 'INSERT INTO report_versions (id,report_id,raw,hash,saved_at) SELECT ?, id, raw, hash, ? FROM reports WHERE id = ?';
 
-const UPSERT = `INSERT INTO reports (${REPORT_COLUMNS},hash) VALUES (?,?,?,?,?,?,?,?,?,?)
-ON CONFLICT(id) DO UPDATE SET date=excluded.date,title=excluded.title,topic=excluded.topic,raw=excluded.raw,hash=excluded.hash,source=excluded.source,source_file_id=excluded.source_file_id,imported_at=excluded.imported_at,revision=excluded.revision`;
+/** 版本号在库内递增：并发写入同一期时各自拿到不同的版本号。 */
+const UPSERT = `INSERT INTO reports (${REPORT_COLUMNS},hash) VALUES (?,?,?,?,?,?,?,?,1,?)
+ON CONFLICT(id) DO UPDATE SET date=excluded.date,title=excluded.title,topic=excluded.topic,raw=excluded.raw,hash=excluded.hash,source=excluded.source,source_file_id=excluded.source_file_id,imported_at=excluded.imported_at,revision=reports.revision+1`;
 
 /**
  * 原子地：先在库内把当前版本复制进历史（全文不经过 Worker），再写入新版本及其派生数据。
@@ -184,12 +184,52 @@ export async function saveReport(db: D1Database, next: ReportWrite, digest: Repo
     db.prepare(ARCHIVE_PREVIOUS).bind(crypto.randomUUID(), savedAt, next.id),
     db
       .prepare(UPSERT)
-      .bind(next.id, next.date, next.title, next.topic, next.source, next.sourceFileId, next.raw, next.importedAt, next.revision, next.hash),
+      .bind(next.id, next.date, next.title, next.topic, next.source, next.sourceFileId, next.raw, next.importedAt, next.hash),
     ...digestStatements(db, next.id, digest, digestVersion),
   ]);
 }
 
-export async function readBack(db: D1Database, id: string): Promise<{ raw: string; hash: string } | null> {
-  const row = await db.prepare('SELECT raw, hash FROM reports WHERE id = ?').bind(id).first<{ raw: string; hash: string }>();
-  return row ? { raw: String(row.raw), hash: String(row.hash) } : null;
+export async function readBack(db: D1Database, id: string): Promise<{ raw: string; hash: string; revision: number } | null> {
+  const row = await db.prepare('SELECT raw, hash, revision FROM reports WHERE id = ?').bind(id).first<{ raw: string; hash: string; revision: number }>();
+  return row ? { raw: String(row.raw), hash: String(row.hash), revision: Number(row.revision) } : null;
+}
+
+/**
+ * 原子地删除一期：当前版本先复制进历史（可从库内找回），再删除记录与派生的动态行。
+ * 历史版本保留，不随记录删除。
+ */
+export async function deleteReportRows(db: D1Database, id: string, savedAt: string): Promise<void> {
+  await db.batch([
+    db.prepare(ARCHIVE_PREVIOUS).bind(crypto.randomUUID(), savedAt, id),
+    db.prepare('DELETE FROM report_stories WHERE report_id = ?').bind(id),
+    db.prepare('DELETE FROM reports WHERE id = ?').bind(id),
+  ]);
+}
+
+interface VersionRow {
+  id: string;
+  hash: string;
+  saved_at: string;
+  chars: number;
+}
+
+/** 历史版本元数据，最新的在前；多取一条用来判断是否还有更早的。 */
+export async function selectVersions(db: D1Database, reportId: string, limit: number): Promise<{ versions: ReportVersion[]; truncated: boolean }> {
+  const { results } = await db
+    .prepare('SELECT id, hash, saved_at, length(raw) AS chars FROM report_versions WHERE report_id = ? ORDER BY saved_at DESC, rowid DESC LIMIT ?')
+    .bind(reportId, limit + 1)
+    .all<VersionRow>();
+  const rows = results ?? [];
+  return {
+    versions: rows.slice(0, limit).map((row) => ({ id: String(row.id), hash: String(row.hash), savedAt: String(row.saved_at), chars: Number(row.chars) })),
+    truncated: rows.length > limit,
+  };
+}
+
+export async function findVersion(db: D1Database, reportId: string, versionId: string): Promise<{ raw: string; hash: string; savedAt: string } | null> {
+  const row = await db
+    .prepare('SELECT raw, hash, saved_at FROM report_versions WHERE id = ? AND report_id = ?')
+    .bind(versionId, reportId)
+    .first<{ raw: string; hash: string; saved_at: string }>();
+  return row ? { raw: String(row.raw), hash: String(row.hash), savedAt: String(row.saved_at) } : null;
 }

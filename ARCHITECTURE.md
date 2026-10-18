@@ -43,6 +43,7 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 查询约定：
 - 单篇下载（Apps Script 每个文件回读一次）只按 id 查一行，不加载整个归档。
 - 写入新版本时，旧版本在库内用 `INSERT … SELECT` 复制进 `report_versions`，全文不经过 Worker。
+- 版本号在 UPSERT 里用 `revision = reports.revision + 1` 递增，返回值取回读到的版本号；同一期被并发写入时各自拿到不同的版本号。
 - `sync_runs` 每 15 分钟一行，最新回执走 `sync_runs_received_at_idx` 索引；每次写入新回执时在同一个 batch 里删掉 30 天（`SYNC_RUN_RETENTION_MS`）以前的旧行，表大小保持在约 3 000 行。
 - 回执带最近一轮失败文件的明细（`failures`，最多 10 条：文件 ID、文件名、原因），存为 JSON 列，同步面板直接列出；旧版脚本不上报时为空。
 
@@ -62,6 +63,11 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 - `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。
 - `/api/sync*`：凭证 `OAI-Sites-Authorization` 由入口校验；API 只识别协议头 `X-Sites-Report-Sync`，并拒绝带 `Origin` / `Sec-Fetch-Site` 的浏览器请求。
 - `setup-credential`：需同源、已登录；配置 `OWNER_EMAILS`（逗号分隔，不区分大小写）后只有名单内账号能取回凭证，未配置时依赖站点本身的私有访问。
+- 删除一期（`DELETE /api/reports/{id}`）与恢复历史版本（`POST …/versions/{versionId}/restore`）走同一个 `requireOwner`：同源、已登录、在 `OWNER_EMAILS` 名单内。删除前当前原文先复制进 `report_versions`，历史版本不随记录删除；种子不能删除（409）。恢复是把旧原文作为新的一版写入，当前内容照常进入历史。
+
+### 版本历史
+- `GET /api/reports/{id}/versions` 返回当前版本与最近 50 条（`MAX_LISTED_VERSIONS`）被替换的版本元数据；`GET …/versions/{versionId}` 下载某一版原文。都不需要登录，与下载原文一致。
+- 阅读页的「版本」按钮打开版本对话框：列出、下载、恢复，以及删除这一期（都需要二次确认）。
 
 ## 前端分层
 ```

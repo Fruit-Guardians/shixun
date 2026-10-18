@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { Category, ImportRequest } from '#shared';
+import type { Category, ImportRequest, IngestResult } from '#shared';
 import { createApiClient } from './api/client.ts';
 import type { ApiClient } from './api/client.ts';
 import BrowseView from './components/BrowseView.tsx';
@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar.tsx';
 import SyncDialog from './components/SyncDialog.tsx';
 import { BackToTop, Toast } from './components/Toast.tsx';
 import Topbar from './components/Topbar.tsx';
+import VersionsDialog from './components/VersionsDialog.tsx';
 import { useArchive } from './hooks/useArchive.ts';
 import { useLocalStore } from './hooks/useLocalStore.ts';
 import { useReportRoute } from './hooks/useReportRoute.ts';
@@ -40,7 +41,7 @@ export interface AppProps {
   api?: ApiClient;
 }
 
-type Modal = 'import' | 'sync' | 'command' | null;
+type Modal = 'import' | 'sync' | 'command' | 'versions' | null;
 
 export default function App({ initial, api = defaultApi }: AppProps) {
   const archive = useArchive(api, initial);
@@ -158,6 +159,22 @@ export default function App({ initial, api = defaultApi }: AppProps) {
     [importReport, closeReport, showToast],
   );
 
+  const handleRestored = useCallback(
+    async (result: IngestResult) => {
+      setModal(null);
+      showToast(result.status === 'unchanged' ? '所选版本与当前内容相同' : `已恢复为第 ${result.revision} 版`);
+      await refresh();
+    },
+    [refresh, showToast],
+  );
+
+  const handleDeleted = useCallback(async () => {
+    setModal(null);
+    navigate('today');
+    showToast('已删除；原文仍保留在库内版本历史里');
+    await refresh();
+  }, [navigate, refresh, showToast]);
+
   const changeDensity = useCallback((next: Density) => densityStore.set(next), []);
 
   return (
@@ -198,7 +215,14 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         {mobileNav && <button className="nav-scrim" aria-label="关闭分类导航" onClick={() => setMobileNav(false)} />}
         <main className="main-content" id="main">
           {reading ? (
-            <ReaderView report={reading} text={readingText} downloadUrl={api.reportUrl(reading.id)} onBack={() => navigate('today')} onCopyLink={copyLink} />
+            <ReaderView
+              report={reading}
+              text={readingText}
+              downloadUrl={api.reportUrl(reading.id)}
+              onBack={() => navigate('today')}
+              onCopyLink={copyLink}
+              onOpenVersions={() => setModal('versions')}
+            />
           ) : archive.status === 'loading' ? (
             <LoadingState />
           ) : (
@@ -230,6 +254,16 @@ export default function App({ initial, api = defaultApi }: AppProps) {
       <Toast message={toast} />
       <ImportDialog open={modal === 'import'} onOpenChange={(open) => setModal(open ? 'import' : null)} onSubmit={handleImport} />
       <SyncDialog open={modal === 'sync'} onOpenChange={(open) => setModal(open ? 'sync' : null)} api={api} sync={archive.sync} onRefresh={handleRefresh} />
+      {reading && (
+        <VersionsDialog
+          open={modal === 'versions'}
+          onOpenChange={(open) => setModal(open ? 'versions' : null)}
+          api={api}
+          report={reading}
+          onRestored={handleRestored}
+          onDeleted={handleDeleted}
+        />
+      )}
       <CommandPalette
         open={modal === 'command'}
         onOpenChange={(open) => setModal(open ? 'command' : null)}

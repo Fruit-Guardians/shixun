@@ -89,3 +89,30 @@ test('aborted requests rethrow the abort instead of a network ApiError', async (
   const api = createApiClient({ fetcher: async () => { throw new DOMException('aborted', 'AbortError'); } });
   await assert.rejects(api.search('x', controller.signal), (e: Error) => e.name === 'AbortError');
 });
+
+test('version history, restore and delete use the shared paths and methods', async () => {
+  const calls: { url: string; method: string }[] = [];
+  const versions = { reportId: 'a b', stored: true, current: { revision: 2, hash: 'h', importedAt: null, chars: 10 }, versions: [], truncated: false };
+  const api = createApiClient({
+    fetcher: async (url, init) => {
+      calls.push({ url, method: init?.method ?? 'GET' });
+      if (url.endsWith('/restore')) return new Response(JSON.stringify({ id: 'a b', status: 'updated', hash: 'h', revision: 3 }));
+      if (init?.method === 'DELETE') return new Response(JSON.stringify({ id: 'a b', deleted: true }));
+      return new Response(JSON.stringify(versions));
+    },
+  });
+  assert.deepEqual(await api.listVersions('a b'), versions);
+  assert.equal((await api.restoreVersion('a b', 'v/1')).revision, 3);
+  assert.deepEqual(await api.deleteReport('a b'), { id: 'a b', deleted: true });
+  assert.deepEqual(calls, [
+    { url: '/api/reports/a%20b/versions', method: 'GET' },
+    { url: '/api/reports/a%20b/versions/v%2F1/restore', method: 'POST' },
+    { url: '/api/reports/a%20b', method: 'DELETE' },
+  ]);
+  assert.equal(api.versionUrl('a b', 'v/1'), '/api/reports/a%20b/versions/v%2F1');
+});
+
+test('malformed version payloads are rejected', async () => {
+  const api = createApiClient({ fetcher: reply({ versions: 'nope' }) });
+  await assert.rejects(api.listVersions('x'), (e: ApiError) => e.code === 'bad_response');
+});

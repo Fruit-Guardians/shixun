@@ -139,6 +139,32 @@ export interface SearchResponse {
   storyIds: string[];
 }
 
+/** 一个被替换下来的历史版本（只含元数据；原文按需下载）。 */
+export interface ReportVersion {
+  id: string;
+  hash: string;
+  /** 这一版被新版本替换（或被删除）的时间。 */
+  savedAt: string;
+  /** 原文字符数（按 Unicode 码点计）。 */
+  chars: number;
+}
+
+/** 某一期的当前版本与历史版本，历史按替换时间倒序。 */
+export interface ReportVersionsResponse {
+  reportId: string;
+  /** 是否为库内记录。种子随站点发布：没有历史，也不能删除。 */
+  stored: boolean;
+  current: { revision: number; hash: string; importedAt: string | null; chars: number };
+  versions: ReportVersion[];
+  /** 是否还有更早的版本未列出。 */
+  truncated: boolean;
+}
+
+export interface DeleteReportResponse {
+  id: string;
+  deleted: true;
+}
+
 export interface SetupCredentialResponse {
   token: string;
 }

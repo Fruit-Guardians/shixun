@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.1.0
+  version: 3.2.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -67,6 +67,70 @@ paths:
           description: Original Markdown as an attachment
           content:
             text/markdown: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      summary: Owner removes a stored report; its current text is kept in version history
+      description: |
+        Signed-in owner (`OWNER_EMAILS` when configured) on the exact same `Origin`. Removes the report and its
+        stories; a legacy seed for the same date and topic becomes visible again. A Drive-synced report comes
+        back when its source file changes.
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeleteReportResponse'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {description: 'Origin mismatch, or not an owner (code: not_owner)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {description: 'Seeds shipped with the site cannot be deleted (code: seed_report)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/reports/{id}/versions:
+    get:
+      summary: Current revision and replaced versions (metadata only, newest first, at most 50)
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Version history; seeds have none
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportVersionsResponse'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/reports/{id}/versions/{versionId}:
+    get:
+      summary: Download one replaced version verbatim
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: versionId, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Markdown as an attachment
+          content:
+            text/markdown: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/reports/{id}/versions/{versionId}/restore:
+    post:
+      summary: Owner restores a replaced version as a new revision
+      description: |
+        Same owner and `Origin` rules as DELETE. The current text is archived like any update, so nothing is
+        lost. Restoring text identical to the current one returns `unchanged`.
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: versionId, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Written and read back
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestResult'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {description: 'Origin mismatch, or not an owner (code: not_owner)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '404': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /api/search:
@@ -214,7 +278,37 @@ components:
         id: {type: string}
         status: {type: string, enum: [created, updated, unchanged]}
         hash: {type: string, description: SHA-256 hex of raw}
-        revision: {type: integer, minimum: 1}
+        revision: {type: integer, minimum: 1, description: Incremented in the database, so concurrent writers never share one}
+    ReportVersion:
+      type: object
+      required: [id, hash, savedAt, chars]
+      properties:
+        id: {type: string}
+        hash: {type: string}
+        savedAt: {type: string, format: date-time, description: When this text was replaced or deleted}
+        chars: {type: integer, minimum: 0, description: Unicode code points}
+    ReportVersionsResponse:
+      type: object
+      required: [reportId, stored, current, versions, truncated]
+      properties:
+        reportId: {type: string}
+        stored: {type: boolean, description: False for seeds shipped with the site, which have no history and cannot be deleted}
+        current:
+          type: object
+          required: [revision, hash, importedAt, chars]
+          properties:
+            revision: {type: integer, minimum: 1}
+            hash: {type: string}
+            importedAt: {type: [string, 'null'], format: date-time}
+            chars: {type: integer, minimum: 0}
+        versions: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ReportVersion'}}
+        truncated: {type: boolean, description: Older versions exist beyond the listed ones}
+    DeleteReportResponse:
+      type: object
+      required: [id, deleted]
+      properties:
+        id: {type: string}
+        deleted: {type: boolean, const: true}
     Tag:
       type: string
       description: Category label assigned by the shared parser

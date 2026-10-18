@@ -1,8 +1,16 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 2.0.0
+  version: 2.1.0
+  description: |
+    Errors are always JSON `{ error: string, code?: string }`. Unknown paths return 404 and unsupported methods return 405 with an `Allow` header.
+    Unexpected write failures on `/api/sync` now return 503 (previously 400) so Apps Script retries instead of treating them as permanent validation errors.
 paths:
+  /api/health:
+    get:
+      summary: Liveness and whether the D1 binding is present (no secrets or data exposed)
+      responses:
+        '200': {description: '{ ok: true, database: boolean }'}
   /api/reports:
     get:
       summary: Read archived reports behind private Site access
@@ -39,6 +47,7 @@ paths:
         '403': {description: Browser or invalid protocol request rejected}
         '410': {description: Legacy google-drive AI sync protocol retired}
         '413': {description: File too large}
+        '503': {description: Storage temporarily unavailable; safe to retry}
   /api/sync/status:
     get:
       summary: Read actual Apps Script heartbeat; empty means awaiting_setup

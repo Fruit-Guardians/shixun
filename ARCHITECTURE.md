@@ -1,0 +1,67 @@
+# 架构说明
+
+## 目标
+前端与后端在**代码、依赖和通信方式**上分离：它们可以独立修改、独立测试，之间只有一份 HTTP 契约。
+
+## 三个包
+| 包 | 职责 | 允许依赖 |
+| --- | --- | --- |
+| `packages/shared` (`#shared`) | 契约：类型、常量、`apiPaths`、日报解析、导入校验、错误类型 | 无 |
+| `packages/api` (`#api`) | 后端：`createApiHandler(options)` 返回 `(Request, env) => Promise<Response>` | `#shared`、`drizzle-orm`（仅 schema） |
+| `packages/web` (`#web`) | 前端：`<App />`，通过 `createApiClient()` 发请求 | `#shared`、React、`@/components/ui/*` |
+
+包别名来自 `package.json` 的 `imports` 字段，Node（测试）、TypeScript 与 Vite 共用同一套解析，无需额外插件。
+
+`app/` 是宿主层，只负责把两端接起来：
+
+- `app/_host/api.ts`：给 API 注入 `env` 绑定与历史日报种子。
+- `app/api/[...path]/route.ts`：把所有 `/api/*` 请求交给 API 包。
+- `app/page.tsx`：服务端进程内调用同一个 `/api/reports` 取首屏数据，作为 `initial` 传给 `<App />`。
+- `app/layout.tsx`：全局样式与主题初始化脚本（来自 `#web`）。
+
+## 依赖规则（ESLint 强制）
+```
+shared ◀── api        api 不得引用 #web / React / Next / cloudflare:workers
+   ▲
+   └────── web        web 不得引用 #api / Next / cloudflare:workers / drizzle
+```
+`api` 与 `web` 互相不可见。需要共享的东西（类型、常量、路径）放进 `shared`。
+
+## 后端分层
+```
+routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, sync.ts, credential.ts, health.ts）
+services/      业务：导入去重、版本历史、同步状态   （不知道 HTTP）
+repositories/  SQL：只有这一层写 SQL               （不知道业务规则）
+http.ts        HttpError、统一错误响应、安全响应头
+auth.ts        平台登录头、程序同步协议、同源检查、常量时间比较
+router.ts      极小路由器：路径参数、404、405 + Allow
+```
+运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。
+
+## 前端分层
+```
+api/client.ts      唯一的 HTTP 出口；ApiError；可注入 fetcher 与 baseUrl
+state/             纯 reducer：浏览状态（视图/筛选/搜索/期数）、归档加载状态
+lib/               纯函数：markdown 解析、选择器（过滤/统计/高亮）、格式化、本机存储
+hooks/             把外部状态接进 React：路由（hash）、主题、收藏、滚动、提示
+components/        只负责展示；业务状态都从 props 来
+App.tsx            组合以上各层
+```
+浏览器偏好（主题、布局、收藏）通过 `useSyncExternalStore` 读取 localStorage，服务端渲染与水合一致，存储不可用时退回内存。
+
+## 为什么仍然是一个 Worker
+站点托管在 Sites 平台：构建产物是单个 Worker（`vinext build`），登录身份由平台入口注入请求头（`oai-authenticated-user-*`），程序同步凭证也在平台入口校验。因此部署形态保持单 Worker，分离发生在代码与契约层。
+
+如果将来需要独立部署，接缝已经就位：`createApiHandler` 是普通的 Fetch 处理器，可以挂到单独的 Worker；前端把 `createApiClient({ baseUrl })` 指向它即可。需要额外处理的是跨域（CORS）与身份传递，目前**没有实现，也没有做过独立部署的验证**。
+
+## 测试
+- `tests/shared`：解析器与种子日报。
+- `tests/api`：对 `createApiHandler` 发真实 `Request`，数据库是 `node:sqlite` 内存库加载真实迁移（`tests/api/helpers/d1.ts`）。
+- `tests/web`：纯模块（解析、选择器、reducer、存储、API 客户端）。
+- `tests/api-smoke.py`：对运行中站点的端到端检查。
+
+## 新增一个接口
+1. 在 `shared/src/constants.ts` 的 `apiPaths` 加路径，在 `types.ts` 加请求/响应类型。
+2. 在 `api/src/routes/` 写处理函数，必要时加 service / repository，在 `app.ts` 注册。
+3. 在 `tests/api/` 补测试；在 `openapi.yaml` 更新。
+4. 在 `web/src/api/client.ts` 加方法并使用。

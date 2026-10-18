@@ -177,3 +177,12 @@ test('field detection ignores urls, times and long sentences', () => {
   assert.equal(toLine('**Why it matters**: impact').label, 'Why it matters');
   assert.equal(toLine('Why: plain ascii colon').label, undefined);
 });
+
+test('a document that opens with a block is not given a title', () => {
+  const types = (raw: string) => parseMarkdown(raw).map((b) => b.type);
+  assert.deepEqual(types('| a | b |\n|--|--|\n| 1 | 2 |'), ['table']);
+  assert.deepEqual(types('```\ncode\n```'), ['code']);
+  assert.deepEqual(types('> 引用'), ['quote']);
+  assert.deepEqual(types('- 一\n- 二'), ['list']);
+  assert.deepEqual(types('日报标题\n\n这是一段正文，带有标点。'), ['h1', 'p']);
+});

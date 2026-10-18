@@ -23,7 +23,7 @@ app/        宿主（Vinext / Cloudflare Worker），只做接线：/api/* 转�
 components/ui/  vendored shadcn 组件（设计系统，前端可用）
 drizzle/        数据库迁移
 integrations/   Google Apps Script 同步器
-tests/          shared / api / web 的单元与接口测试；api-smoke.py 为对运行中站点的端到端检查
+tests/          shared / api / web 的单元、接口与组件渲染测试
 ```
 前端不能引用 `#api`，后端不能引用 `#web`、React 或 `cloudflare:workers`，违反时 `npm run lint` 失败。
 
@@ -33,7 +33,7 @@ npm run dev -- --hostname 127.0.0.1   # 本地开发
 npm run check                         # 类型检查 + ESLint + 全部测试
 npm test                              # 仅测试（Node 内置测试运行器，无需额外依赖）
 ```
-接口测试用 `node:sqlite` 加载真实的 `drizzle/*.sql` 迁移，在内存 D1 上运行，不需要启动站点。对运行中站点的端到端检查：`python3 -I tests/api-smoke.py`（会向本地开发库写入同步回执）。
+接口测试用 `node:sqlite` 加载真实的 `drizzle/*.sql` 迁移，在内存 D1 上运行，不需要启动站点。对运行中站点的只读冒烟检查：`npm run smoke`（默认本地开发站，`SMOKE_BASE_URL=https://… npm run smoke` 检查线上；不写入任何数据）。
 
 数据库迁移与构建按 Sites 工作流执行。生产数据库与本地数据库独立。
 

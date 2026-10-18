@@ -255,6 +255,12 @@ class Parser {
     return this.isSection(j) || this.isStoryStart(j);
   }
 
+  /** 第一行若是代码块、表格、引用、列表或分隔线，就不把它当标题。 */
+  private opensBlock(j: number): boolean {
+    const raw = this.lines[j];
+    return FENCE.test(raw) || HR.test(raw) || this.text(j).startsWith('>') || LIST_MARKER.test(raw) || this.isTableStart(j);
+  }
+
   private isTableStart(j: number): boolean {
     return this.text(j).includes('|') && TABLE_SEPARATOR.test(this.lines[j + 1] ?? '');
   }
@@ -292,7 +298,7 @@ class Parser {
         this.i++;
         continue;
       }
-      if (this.topLevel && i === firstContent && !/^(作者|发生了什么)/.test(plain(text))) {
+      if (this.topLevel && i === firstContent && !/^(作者|发生了什么)/.test(plain(text)) && !this.opensBlock(i)) {
         this.blocks.push({ type: 'h1', nodes: parseInline(unwrapBold(stripHardBreak(text.replace(/^#{1,6}\s+/, '')))) });
         this.i++;
         continue;

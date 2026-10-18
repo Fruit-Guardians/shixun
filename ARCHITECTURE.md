@@ -88,8 +88,8 @@ App.tsx            组合以上各层
 ## 测试
 - `tests/shared`：解析器与种子日报。
 - `tests/api`：对 `createApiHandler` 发真实 `Request`，数据库是 `node:sqlite` 内存库加载真实迁移（`tests/api/helpers/d1.ts`）。
-- `tests/web`：纯模块（解析、选择器、reducer、存储、API 客户端）。
-- `tests/api-smoke.py`：对运行中站点的端到端检查。
+- `tests/web`：纯模块（解析、选择器、reducer、存储、API 客户端）；`*.test.tsx` 用 `renderToStaticMarkup` 渲染组件检查结构（锚点与目录对齐、链接安全、阅读页各状态），经 `tsx` 加载，不需要 DOM。
+- `npm run smoke`（`scripts/smoke.mjs`）：对运行中站点的只读冒烟检查，不写入任何数据；`SMOKE_BASE_URL` 指定站点，默认本地开发站。部署后可用它确认迁移已执行（列表 503 或缺少 `failures` 时会直接报出）。
 
 ## 新增一个接口
 1. 在 `shared/src/constants.ts` 的 `apiPaths` 加路径，在 `types.ts` 加请求/响应类型。

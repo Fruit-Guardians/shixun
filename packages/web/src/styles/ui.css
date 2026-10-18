@@ -286,8 +286,46 @@ mark{background:var(--warn);color:#111;padding:0 1px}
 .markdown a{color:var(--accent-text);border-bottom:1px dashed currentColor}
 .markdown a:hover{border-bottom-style:solid;background:var(--accent-soft)}
 .markdown code{font-family:var(--mono);font-size:.86em;padding:1px 6px;background:var(--surface-3);color:var(--accent-text)}
-.markdown .source-line,.markdown .aside-line{font-size:13px;color:var(--ink-3);padding-left:12px;border-left:2px solid var(--line-2)}
-.markdown .aside-line{margin:18px 0}
+.markdown em{font-style:italic;color:var(--ink)}
+.markdown del{color:var(--ink-3);text-decoration-color:var(--ink-3)}
+.markdown a.md-url{font-family:var(--mono);font-size:.84em;word-break:break-all}
+.markdown a.md-mention{border-bottom:0;font-weight:600}
+.markdown a.md-mention:hover{text-decoration:underline}
+.markdown p.tone-source,.markdown p.tone-aside{font-size:13px;line-height:1.8;color:var(--ink-3);padding-left:12px;border-left:2px solid var(--line-2)}
+.markdown p.tone-aside{margin:18px 0}
+.markdown h4{margin:26px 0 10px;font-size:15px;line-height:1.6;color:var(--ink);font-weight:800;letter-spacing:.02em}
+.markdown h4:before{content:'';display:inline-block;width:6px;height:6px;margin:0 8px 2px 0;background:var(--accent-text);vertical-align:middle}
+.markdown .md-story{margin:28px 0;padding:18px 20px 16px;border:1px solid var(--line);border-left:3px solid var(--frame);background:var(--surface-2)}
+.markdown .md-story h3{display:flex;gap:12px;align-items:baseline;margin:0 0 12px}
+.markdown .md-story h3:before{content:none}
+.markdown .md-story-no{flex-shrink:0;font-family:var(--mono);font-size:.82em;font-weight:700;color:var(--accent-text)}
+.markdown .md-story>:last-child{margin-bottom:0}
+.markdown .md-fields{display:grid;gap:6px;margin:0 0 14px}
+.markdown .md-field{display:grid;grid-template-columns:minmax(4.5em,max-content) 1fr;gap:12px;font-size:15px;line-height:1.8}
+.markdown .md-label{font-size:12px;line-height:2.3;font-weight:700;color:var(--ink-3);white-space:nowrap;letter-spacing:.04em}
+.markdown .md-value{min-width:0}
+.markdown .md-line{margin:0;font-size:15px;line-height:1.8}
+.markdown .tone-meta .md-value,.markdown .md-line.tone-meta{font-family:var(--mono);font-size:13px;color:var(--ink-3)}
+.markdown .tone-source .md-value,.markdown .md-line.tone-source{font-size:13px;color:var(--ink-3)}
+.markdown .md-line.tone-aside{font-size:13px;color:var(--ink-3)}
+.markdown .md-list{margin:0 0 14px;padding-left:1.6em}
+.markdown ol.md-list{list-style:decimal}.markdown ul.md-list{list-style:square}
+.markdown .md-list .md-list{margin:6px 0 0}
+.markdown .md-list>li{margin:0 0 8px;padding-left:.2em}
+.markdown .md-list>li::marker{font-family:var(--mono);font-size:.85em;color:var(--accent-text)}
+.markdown .md-list>li>.md-fields{margin:6px 0 4px}
+.markdown blockquote{margin:0 0 16px;padding:4px 0 4px 16px;border-left:3px solid var(--accent-text);color:var(--ink-2);background:var(--accent-soft)}
+.markdown blockquote>:last-child{margin-bottom:0}
+.markdown pre.md-code{position:relative;margin:0 0 16px;padding:14px 16px;overflow-x:auto;background:var(--surface-3);border:1px solid var(--line);font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--ink)}
+.markdown pre.md-code code{padding:0;background:none;color:inherit;font-size:inherit}
+.markdown pre.md-code[data-lang]:not([data-lang=""]):before{content:attr(data-lang);position:absolute;top:4px;right:8px;font-size:11px;color:var(--ink-3);text-transform:uppercase}
+.markdown .md-table{margin:0 0 16px;overflow-x:auto;border:1px solid var(--line)}
+.markdown .md-table:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+.markdown .md-table table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.7}
+.markdown .md-table th,.markdown .md-table td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.markdown .md-table th{background:var(--surface-3);color:var(--ink);font-weight:700;white-space:nowrap}
+.markdown .md-table tr:last-child td{border-bottom:0}
+.markdown hr{margin:36px 0;border:0;border-top:1px dashed var(--line-2)}
 .article-end{margin-top:40px;text-align:center;color:var(--ink-3);font-size:12px}
 .toc{position:sticky;top:calc(var(--header-h) + 22px);max-height:calc(100dvh - var(--header-h) - 44px);overflow-y:auto;font-size:12px}
 .toc .window-body{padding:10px 0}
@@ -399,7 +437,7 @@ mark{background:var(--warn);color:#111;padding:0 1px}
  .list-layout .story-card{grid-template-columns:1fr}.list-layout .story-bottom{grid-column:1;grid-row:3;flex-direction:row;justify-content:space-between;margin-top:8px}
  .edition-footer{flex-direction:column;align-items:flex-start}
  .archive-list{padding-left:16px}.archive-card:before{left:-27px}.archive-card{gap:14px;padding:12px}.archive-date{font-size:22px;min-width:54px}.archive-card h2{font-size:16px}
- .reader-paper .window-body{padding:20px 16px 28px}.markdown{font-size:15px}.markdown h1{font-size:24px}.markdown h2{font-size:19px}.markdown h3{font-size:16px}
+ .reader-paper .window-body{padding:20px 16px 28px}.markdown{font-size:15px}.markdown h1{font-size:24px}.markdown h2{font-size:19px}.markdown h3{font-size:16px}.markdown .md-story{padding:14px 14px 12px;margin:22px 0}.markdown .md-field{grid-template-columns:1fr;gap:0}.markdown .md-label{line-height:1.6}
  .modal-body{padding:18px 16px 22px}.modal h2,.modal [data-slot=dialog-title]{font-size:20px}.form-row{grid-template-columns:1fr}.setup-heading{flex-direction:column;gap:2px}.pipeline{font-size:11px;padding:8px}
  .to-top{right:14px;bottom:16px}
 }

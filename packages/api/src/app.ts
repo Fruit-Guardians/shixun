@@ -1,6 +1,6 @@
 import { apiPaths } from '#shared';
 import type { ApiEnv, ApiOptions } from './env.ts';
-import { HttpError, NO_STORE, errorResponse, json } from './http.ts';
+import { HttpError, errorResponse, json } from './http.ts';
 import { Router } from './router.ts';
 import { setupCredentialRoute } from './routes/credential.ts';
 import { healthRoute } from './routes/health.ts';
@@ -27,15 +27,17 @@ export type ApiHandler = (request: Request, env: ApiEnv) => Promise<Response>;
  */
 export function createApiHandler(options: ApiOptions = {}): ApiHandler {
   const router = buildRouter();
+  const seeds = options.seedReports ?? [];
+  const clock = options.now ?? (() => new Date());
   return async (request, env) => {
     try {
       const url = new URL(request.url);
       const { handler, params } = router.resolve(request.method, url.pathname);
-      return await handler({ request, url, env, options, params });
+      return await handler({ request, url, env, params, seeds, now: clock() });
     } catch (error) {
       if (error instanceof HttpError) return errorResponse(error);
       console.error('api unhandled error', error);
-      return json({ error: '服务暂时不可用，请稍后重试。' }, { status: 500, headers: NO_STORE });
+      return json({ error: '服务暂时不可用，请稍后重试。' }, { status: 500 });
     }
   };
 }

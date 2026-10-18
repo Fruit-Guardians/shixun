@@ -10,9 +10,15 @@ export const sampleRaw = seeds[0].raw;
 export const USER_HEADERS = { 'oai-authenticated-user-id': 'u1', 'oai-authenticated-user-email': 'owner@example.com' };
 export const PROGRAM_HEADERS = { 'x-sites-report-sync': 'google-apps-script', 'content-type': 'application/json' };
 
-export function createHarness(env: Partial<ApiEnv> = {}, withSeeds = true) {
+export interface HarnessOptions {
+  withSeeds?: boolean;
+  /** 固定或可推进的时钟；默认真实时间。 */
+  now?: () => Date;
+}
+
+export function createHarness(env: Partial<ApiEnv> = {}, { withSeeds = true, now }: HarnessOptions = {}) {
   const DB = createTestD1();
-  const handle = createApiHandler({ seedReports: withSeeds ? seeds : [] });
+  const handle = createApiHandler({ seedReports: withSeeds ? seeds : [], now });
   const fullEnv: ApiEnv = { DB, ...env };
   return {
     DB,

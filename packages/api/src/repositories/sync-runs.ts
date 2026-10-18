@@ -1,6 +1,15 @@
-type Row = Record<string, unknown>;
+import type { ValidatedSyncRun } from '#shared';
 
-export interface SyncRunRow {
+interface SyncRunRow {
+  received_at: string;
+  trigger_installed: number;
+  created_count: number;
+  updated_count: number;
+  unchanged_count: number;
+  failed_count: number;
+}
+
+export interface SyncRun {
   receivedAt: string;
   triggerInstalled: boolean;
   created: number;
@@ -9,8 +18,13 @@ export interface SyncRunRow {
   failed: number;
 }
 
-export async function latestSyncRun(db: D1Database): Promise<SyncRunRow | null> {
-  const row = await db.prepare('SELECT * FROM sync_runs ORDER BY received_at DESC, rowid DESC LIMIT 1').first<Row>();
+/** 依赖 sync_runs_received_at_idx，不做全表扫描。 */
+export async function latestSyncRun(db: D1Database): Promise<SyncRun | null> {
+  const row = await db
+    .prepare(
+      'SELECT received_at,trigger_installed,created_count,updated_count,unchanged_count,failed_count FROM sync_runs ORDER BY received_at DESC, rowid DESC LIMIT 1',
+    )
+    .first<SyncRunRow>();
   if (!row) return null;
   return {
     receivedAt: String(row.received_at),
@@ -22,14 +36,9 @@ export async function latestSyncRun(db: D1Database): Promise<SyncRunRow | null> 
   };
 }
 
-export interface SyncRunInsert {
+export interface SyncRunInsert extends Omit<ValidatedSyncRun, 'checkedAt'> {
   receivedAt: string;
   checkedAt: string;
-  triggerInstalled: boolean;
-  created: number;
-  updated: number;
-  unchanged: number;
-  failed: number;
 }
 
 export async function insertSyncRun(db: D1Database, run: SyncRunInsert): Promise<void> {

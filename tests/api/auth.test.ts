@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getPlatformUser, hasBearerToken, isProgramSync, isSameOrigin, safeEqual } from '../../packages/api/src/auth.ts';
+import { getPlatformUser, hasBearerToken, isOwner, isProgramSync, isSameOrigin, safeEqual } from '../../packages/api/src/auth.ts';
 
 test('platform user is read from ingress headers and full names are decoded', () => {
   assert.equal(getPlatformUser(new Headers()), null);
@@ -38,4 +38,12 @@ test('same-origin policy distinguishes missing from mismatched origins', () => {
   assert.ok(!isSameOrigin(req(), { allowMissing: false }));
   assert.ok(isSameOrigin(req('https://x.test'), { allowMissing: false }));
   assert.ok(!isSameOrigin(req('https://evil.test'), { allowMissing: true }));
+});
+
+test('owner allowlist is optional, trimmed and case-insensitive', () => {
+  const user = { userId: 'u1', email: 'Owner@Example.com', displayName: 'o', fullName: null };
+  assert.ok(isOwner(user, undefined));
+  assert.ok(isOwner(user, ' , '));
+  assert.ok(isOwner(user, 'a@b.c, owner@example.com'));
+  assert.ok(!isOwner(user, 'a@b.c'));
 });

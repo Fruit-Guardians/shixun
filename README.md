@@ -41,7 +41,7 @@ npm test                              # 仅测试（Node 内置测试运行器�
 源目录：`1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT`。
 完整安装说明在 `integrations/google-apps-script/README.md` 与站点「数据与同步」面板。普通 Google Apps Script 每15分钟扫描一次源目录，增量投递与全文回读；不调用 AI，不依赖个人电脑开机。首次运行 `installSync` 需要所有者完成 Google 授权，文件准备好不代表触发器已安装。停用运行 `disableSync`。
 
-`SITE_SERVICE_TOKEN` 仅存 Google 脚本属性；站点对应 `SITES_SERVICE_ACCESS` 是后台 secret。前端显式点击、同源且登录后才能复制，不写入脚本包或客户端源码。Google 授权包括只读 Drive、外部请求和触发器管理；代码只枚举指定源目录。
+`SITE_SERVICE_TOKEN` 仅存 Google 脚本属性；站点对应 `SITES_SERVICE_ACCESS` 是后台 secret。前端显式点击、同源且登录后才能复制（可选设置 `OWNER_EMAILS` 限定为所有者邮箱），不写入脚本包或客户端源码。Google 授权包括只读 Drive、外部请求和触发器管理；代码只枚举指定源目录。
 
 这是仅所有者可访问的网站。`/api/sync` 的授权边界是 Sites 私有访问控制，`X-Sites-Report-Sync: google-apps-script` 仅标识协议。旧 `google-drive` 协议返回410。若未来调整为公开，必须先重新设计写入与设置凭证接口的独立授权。
 

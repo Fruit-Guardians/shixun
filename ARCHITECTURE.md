@@ -30,13 +30,26 @@ shared ◀── api        api 不得引用 #web / React / Next / cloudflare:wo
 ## 后端分层
 ```
 routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, sync.ts, credential.ts, health.ts）
-services/      业务：导入去重、版本历史、同步状态   （不知道 HTTP）
-repositories/  SQL：只有这一层写 SQL               （不知道业务规则）
-http.ts        HttpError、统一错误响应、安全响应头
-auth.ts        平台登录头、程序同步协议、同源检查、常量时间比较
+               service-errors.ts：ValidationError→400、回读不一致→503、其它→记录日志 + 503
+services/      业务：导入去重、版本历史、归档合并与排序、同步状态   （不知道 HTTP）
+repositories/  SQL：只有这一层写 SQL；列名显式列出   （不知道业务规则）
+schema.ts      drizzle 表与索引定义，仅用于 `npm run db:generate` 生成 drizzle/ 迁移
+http.ts        HttpError、统一错误响应；所有响应默认带 no-store + nosniff
+auth.ts        平台登录头、所有者名单、程序同步协议、同源检查、常量时间比较
 router.ts      极小路由器：路径参数、404、405 + Allow
 ```
-运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。
+运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
+
+查询约定：
+- 单篇下载（Apps Script 每个文件回读一次）只按 id 查一行，不加载整个归档。
+- 写入新版本时，旧版本在库内用 `INSERT … SELECT` 复制进 `report_versions`，全文不经过 Worker。
+- `sync_runs` 每 15 分钟一行，最新回执走 `sync_runs_received_at_idx` 索引。
+
+### 信任边界
+身份全部来自 Sites 入口，API 不再二次校验：
+- `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。
+- `/api/sync*`：凭证 `OAI-Sites-Authorization` 由入口校验；API 只识别协议头 `X-Sites-Report-Sync`，并拒绝带 `Origin` / `Sec-Fetch-Site` 的浏览器请求。
+- `setup-credential`：需同源、已登录；配置 `OWNER_EMAILS`（逗号分隔，不区分大小写）后只有名单内账号能取回凭证，未配置时依赖站点本身的私有访问。
 
 ## 前端分层
 ```

@@ -1,12 +1,16 @@
-import type { ApiEnv, ApiOptions } from './env.ts';
+import type { Report } from '#shared';
+import type { ApiEnv } from './env.ts';
 import { HttpError } from './http.ts';
 
 export interface RequestContext {
   request: Request;
   url: URL;
   env: ApiEnv;
-  options: ApiOptions;
   params: Record<string, string>;
+  /** 随代码发布的历史日报。 */
+  seeds: readonly Report[];
+  /** 本次请求的时间；整个请求内保持一致。 */
+  now: Date;
 }
 
 export type Handler = (context: RequestContext) => Response | Promise<Response>;

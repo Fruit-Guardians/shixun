@@ -70,3 +70,15 @@ export function isSameOrigin(request: Request, options: { allowMissing: boolean 
   if (origin === null) return options.allowMissing;
   return origin === new URL(request.url).origin;
 }
+
+/**
+ * 站点所有者检查。未配置 OWNER_EMAILS 时不额外限制（由站点私有访问兜底）；
+ * 配置后邮箱必须在名单内（不区分大小写）。
+ */
+export function isOwner(user: PlatformUser, ownerEmails: string | undefined): boolean {
+  const allowed = (ownerEmails ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.length === 0 || allowed.includes(user.email.toLowerCase());
+}

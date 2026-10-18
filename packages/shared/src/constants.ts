@@ -11,8 +11,8 @@ export const MIN_REPORT_CHARS = 100;
 export const MAX_REPORT_BYTES = 500_000;
 /** 请求体上限（含 JSON 包装），略大于正文上限。 */
 export const MAX_BODY_BYTES = 600_000;
-/** 同步状态回执的字符上限。 */
-export const MAX_STATUS_BODY_CHARS = 4_096;
+/** 同步状态回执的请求体字节上限。 */
+export const MAX_STATUS_BODY_BYTES = 4_096;
 export const MAX_SYNC_COUNT = 10_000;
 /** 超过该时长没有收到 Google 脚本回执，同步状态记为「延迟」。 */
 export const SYNC_STALE_MS = 60 * 60 * 1000;

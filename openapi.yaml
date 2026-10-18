@@ -1,94 +1,243 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 2.1.0
+  version: 2.2.0
   description: |
-    Errors are always JSON `{ error: string, code?: string }`. Unknown paths return 404 and unsupported methods return 405 with an `Allow` header.
-    Unexpected write failures on `/api/sync` now return 503 (previously 400) so Apps Script retries instead of treating them as permanent validation errors.
+    Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
+    Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
+    unsupported methods return 405 with an `Allow` header. 503 means storage is missing or temporarily
+    unavailable and the request is safe to retry.
+
+    Identity comes from the Sites ingress: `oai-authenticated-user-*` headers for signed-in visitors and
+    `OAI-Sites-Authorization` for program sync. The API trusts these headers and does not re-verify them.
 paths:
   /api/health:
     get:
       summary: Liveness and whether the D1 binding is present (no secrets or data exposed)
       responses:
-        '200': {description: '{ ok: true, database: boolean }'}
+        '200':
+          description: Alive
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
   /api/reports:
     get:
-      summary: Read archived reports behind private Site access
+      summary: Read archived reports (seeds merged with stored reports, newest first)
       responses:
-        '200': {description: Reports, import status and actual program-sync heartbeat state}
-        '503': {description: Storage temporarily unavailable}
+        '200':
+          description: Reports, Drive import status and the actual program-sync heartbeat
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportsResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
     post:
-      summary: Import Markdown as a signed-in visitor
-      responses:
-        '200': {description: Created, updated, or unchanged with readback verified}
-        '400': {description: Invalid content or date}
-        '401': {description: Sign-in required}
-        '403': {description: Origin mismatch}
-        '413': {description: File too large}
-  /api/sync:
-    post:
-      summary: Drive ingestion, exclusively behind owner-private Sites service access
-      description: Requires OAI-Sites-Authorization at Sites ingress and X-Sites-Report-Sync google-apps-script. Not a public endpoint.
+      summary: Import Markdown as a signed-in visitor, or as a server holding INGEST_TOKEN
+      description: |
+        Browsers must send a matching `Origin`. Callers without `Origin` are treated as server-side and must
+        present a platform identity or `Authorization: Bearer <INGEST_TOKEN>`.
+      security:
+        - {}
+        - ingestToken: []
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [raw, date, sourceFileId]
-              properties:
-                raw: {type: string, description: Complete unchanged UTF-8 Markdown}
-                date: {type: string, format: date}
-                sourceFileId: {type: string}
-                topic: {type: string, enum: [全球技术社区, 安全专题]}
+            schema: {$ref: '#/components/schemas/ImportRequest'}
       responses:
-        '200': {description: Exact content readback verified, includes id, hash, status, revision}
-        '400': {description: Validation failed}
-        '403': {description: Browser or invalid protocol request rejected}
-        '410': {description: Legacy google-drive AI sync protocol retired}
-        '413': {description: File too large}
-        '503': {description: Storage temporarily unavailable; safe to retry}
-  /api/sync/status:
-    get:
-      summary: Read actual Apps Script heartbeat; empty means awaiting_setup
-      responses:
-        '200': {description: mode, state, lastCheckedAt, triggerInstalled and run counters}
-        '503': {description: State storage temporarily unavailable}
-    post:
-      summary: Record Google runtime trigger state and run counters behind private ingress
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [triggerInstalled]
-              properties:
-                triggerInstalled: {type: boolean}
-                checkedAt: {type: string, format: date-time}
-                created: {type: integer, minimum: 0, maximum: 10000}
-                updated: {type: integer, minimum: 0, maximum: 10000}
-                unchanged: {type: integer, minimum: 0, maximum: 10000}
-                failed: {type: integer, minimum: 0, maximum: 10000}
-      responses:
-        '200': {description: Recorded state}
-        '400': {description: Invalid state}
-        '403': {description: Browser or invalid protocol rejected}
-        '413': {description: State body too large}
-  /api/integration/setup-credential:
-    post:
-      summary: Explicit owner setup action to copy private service credential
-      description: Signed-in owner on owner-private Site, exact same Origin. Never cached. Never include token in static assets or logs.
-      responses:
-        '200': {description: Runtime service token for Google Script Properties only}
-        '401': {description: Sign-in required}
-        '403': {description: Origin mismatch}
-        '503': {description: Runtime credential not configured}
+        '200':
+          description: Created, updated, or unchanged with readback verified
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestResult'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /api/reports/{id}:
     get:
       summary: Download exact original Markdown
       parameters:
         - {in: path, name: id, required: true, schema: {type: string}}
       responses:
-        '200': {description: Original Markdown with download headers}
-        '404': {description: Report not found}
+        '200':
+          description: Original Markdown as an attachment
+          content:
+            text/markdown: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/sync:
+    post:
+      summary: Drive ingestion, exclusively behind owner-private Sites service access
+      description: |
+        Requires `OAI-Sites-Authorization` at Sites ingress and `X-Sites-Report-Sync: google-apps-script`,
+        with no `Origin` or `Sec-Fetch-Site` header. Not a public endpoint.
+      parameters:
+        - {in: header, name: X-Sites-Report-Sync, required: true, schema: {type: string, enum: [google-apps-script]}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/ImportRequest'}
+                - {type: object, required: [sourceFileId]}
+      responses:
+        '200':
+          description: Exact content readback verified
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestResult'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Error'}
+        '410': {description: 'Legacy google-drive AI sync protocol retired (code: legacy_ai_sync_retired)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '413': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/sync/status:
+    get:
+      summary: Read actual Apps Script heartbeat; empty means awaiting_setup
+      responses:
+        '200':
+          description: Current state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncState'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      summary: Record Google runtime trigger state and run counters behind private ingress
+      parameters:
+        - {in: header, name: X-Sites-Report-Sync, required: true, schema: {type: string, enum: [google-apps-script]}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SyncRunInput'}
+      responses:
+        '200':
+          description: Recorded state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncState'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Error'}
+        '413': {description: State body larger than 4096 bytes, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/integration/setup-credential:
+    post:
+      summary: Explicit owner setup action to copy private service credential
+      description: |
+        Signed-in visitor on the owner-private Site, exact same `Origin`. When `OWNER_EMAILS` is configured,
+        only those accounts (case-insensitive) may read the credential. Never include the token in static
+        assets or logs.
+      responses:
+        '200':
+          description: Runtime service token for Google Script Properties only
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token: {type: string}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {description: 'Origin mismatch, or signed in but not an owner (code: not_owner)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: Runtime credential not configured, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+components:
+  securitySchemes:
+    ingestToken: {type: http, scheme: bearer, description: Optional INGEST_TOKEN for server-side imports}
+  responses:
+    Error:
+      description: Request rejected
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Invalid:
+      description: Malformed JSON or failed validation; `error` is safe to show to users
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unavailable:
+      description: Storage missing or temporarily unavailable; safe to retry
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+        code: {type: string}
+    Health:
+      type: object
+      required: [ok, database]
+      properties:
+        ok: {type: boolean, const: true}
+        database: {type: boolean}
+    Topic:
+      type: string
+      enum: [全球技术社区, 安全专题]
+    ImportRequest:
+      type: object
+      required: [raw, date]
+      properties:
+        raw: {type: string, description: 'Complete unchanged UTF-8 Markdown, at least 100 characters and at most 500 000 bytes'}
+        date: {type: string, format: date}
+        topic: {allOf: [{$ref: '#/components/schemas/Topic'}], description: Defaults to 全球技术社区 when omitted; other values are rejected}
+        sourceFileId: {type: string, pattern: '^[A-Za-z0-9_-]{10,150}$'}
+    IngestResult:
+      type: object
+      required: [id, status, hash, revision]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [created, updated, unchanged]}
+        hash: {type: string, description: SHA-256 hex of raw}
+        revision: {type: integer, minimum: 1}
+    Report:
+      type: object
+      required: [id, date, title, topic, source, sourceFileId, raw, importedAt]
+      properties:
+        id: {type: string}
+        date: {type: string, format: date}
+        title: {type: string}
+        topic: {$ref: '#/components/schemas/Topic'}
+        source: {type: string}
+        sourceFileId: {type: [string, 'null']}
+        raw: {type: string}
+        importedAt: {type: [string, 'null'], format: date-time}
+        revision: {type: integer}
+    SyncRunInput:
+      type: object
+      required: [triggerInstalled]
+      properties:
+        triggerInstalled: {type: boolean}
+        checkedAt: {type: string, format: date-time}
+        created: {type: integer, minimum: 0, maximum: 10000}
+        updated: {type: integer, minimum: 0, maximum: 10000}
+        unchanged: {type: integer, minimum: 0, maximum: 10000}
+        failed: {type: integer, minimum: 0, maximum: 10000}
+    SyncState:
+      type: object
+      required: [mode, state, lastCheckedAt, triggerInstalled, created, updated, unchanged, failed, legacyWriterDisabled]
+      properties:
+        mode: {type: string, const: google-apps-script}
+        state: {type: string, enum: [awaiting_setup, active, stale, attention, disabled]}
+        lastCheckedAt: {type: [string, 'null'], format: date-time}
+        triggerInstalled: {type: boolean}
+        created: {type: integer}
+        updated: {type: integer}
+        unchanged: {type: integer}
+        failed: {type: integer}
+        legacyWriterDisabled: {type: boolean, const: true}
+    ReportsResponse:
+      type: object
+      required: [reports, sync, drive]
+      properties:
+        reports: {type: array, items: {$ref: '#/components/schemas/Report'}}
+        sync: {$ref: '#/components/schemas/SyncState'}
+        drive:
+          type: object
+          required: [status, folderId]
+          properties:
+            status: {type: string, enum: [imported, not_connected]}
+            folderId: {type: string}

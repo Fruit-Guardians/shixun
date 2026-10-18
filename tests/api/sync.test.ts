@@ -16,9 +16,10 @@ test('sync ingest rejects browsers, missing protocol and the retired AI protocol
 });
 
 test('sync ingest needs a Drive file id and is idempotent with exact readback', async () => {
-  const h = createHarness({}, false);
+  const h = createHarness({}, { withSeeds: false });
   const noId = await h.call('/api/sync', { method: 'POST', json: { raw: sampleRaw, date: '2026-10-16' }, headers: PROGRAM_HEADERS });
   assert.equal(noId.status, 400);
+  assert.match(((await noId.json()) as { error: string }).error, /Drive 文件 ID/);
 
   const first = (await (await h.call('/api/sync', { method: 'POST', json: payload, headers: PROGRAM_HEADERS })).json()) as { id: string; status: string };
   assert.equal(first.status, 'created');
@@ -59,10 +60,27 @@ test('sync status rejects malformed receipts and non-program callers', async () 
 });
 
 test('stale receipts older than an hour are reported as stale', async () => {
-  const h = createHarness();
-  await h.call('/api/sync/status', { method: 'POST', json: { triggerInstalled: true }, headers: PROGRAM_HEADERS });
-  h.DB.raw.prepare('UPDATE sync_runs SET received_at = ?').run(new Date(Date.now() - 2 * 3600_000).toISOString());
+  let now = new Date('2026-10-17T00:00:00Z');
+  const h = createHarness({}, { now: () => now });
+  const recorded = (await (await h.call('/api/sync/status', { method: 'POST', json: { triggerInstalled: true }, headers: PROGRAM_HEADERS })).json()) as SyncState;
+  assert.equal(recorded.lastCheckedAt, '2026-10-17T00:00:00.000Z');
+  now = new Date('2026-10-17T00:59:00Z');
+  assert.equal(((await (await h.call('/api/sync/status')).json()) as SyncState).state, 'active');
+  now = new Date('2026-10-17T01:01:00Z');
   assert.equal(((await (await h.call('/api/sync/status')).json()) as SyncState).state, 'stale');
+});
+
+test('sync status degrades to 503 JSON without a database', async () => {
+  const h = createHarness();
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const res = await h.callWithoutDb('/api/sync/status');
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get('cache-control'), 'private, no-store');
+  } finally {
+    console.error = original;
+  }
 });
 
 test('setup credential is same-origin, login-only and never exposed otherwise', async () => {
@@ -77,4 +95,16 @@ test('setup credential is same-origin, login-only and never exposed otherwise', 
   const unconfigured = createHarness();
   const res = await unconfigured.call('/api/integration/setup-credential', { method: 'POST', json: {}, headers: { origin: ORIGIN, ...USER_HEADERS } });
   assert.equal(res.status, 503);
+});
+
+test('setup credential is limited to OWNER_EMAILS when configured', async () => {
+  const h = createHarness({ SITES_SERVICE_ACCESS: 'service-secret', OWNER_EMAILS: 'someone@example.com, Owner@Example.com' });
+  const post = (email: string) =>
+    h.call('/api/integration/setup-credential', { method: 'POST', json: {}, headers: { origin: ORIGIN, ...USER_HEADERS, 'oai-authenticated-user-email': email } });
+  const stranger = await post('visitor@example.com');
+  assert.equal(stranger.status, 403);
+  assert.deepEqual(await stranger.json(), { error: '只有站点所有者可以取回同步凭证。', code: 'not_owner' });
+  const owner = await post('owner@example.com');
+  assert.equal(owner.status, 200);
+  assert.deepEqual(await owner.json(), { token: 'service-secret' });
 });

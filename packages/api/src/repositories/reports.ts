@@ -1,13 +1,21 @@
 import type { Report, ReportTopic } from '#shared';
 
-/** D1 里 reports 表的一行。所有 SQL 集中在 repositories 目录。 */
-type Row = Record<string, unknown>;
-
-export interface StoredReport extends Report {
-  hash: string;
+/** reports 表的 SQL 全在这里。列名显式列出，避免把不需要的列（hash）读出来。 */
+interface ReportRow {
+  id: string;
+  date: string;
+  title: string;
+  topic: string;
+  source: string;
+  source_file_id: string | null;
+  raw: string;
+  imported_at: string;
+  revision: number;
 }
 
-function toReport(row: Row): Report {
+const REPORT_COLUMNS = 'id,date,title,topic,source,source_file_id,raw,imported_at,revision';
+
+function toReport(row: ReportRow): Report {
   return {
     id: String(row.id),
     date: String(row.date),
@@ -22,13 +30,23 @@ function toReport(row: Row): Report {
 }
 
 export async function selectReports(db: D1Database): Promise<Report[]> {
-  const { results } = await db.prepare('SELECT * FROM reports ORDER BY date DESC').all<Row>();
+  const { results } = await db.prepare(`SELECT ${REPORT_COLUMNS} FROM reports ORDER BY date DESC`).all<ReportRow>();
   return (results ?? []).map(toReport);
 }
 
-export async function findReport(db: D1Database, id: string): Promise<StoredReport | null> {
-  const row = await db.prepare('SELECT * FROM reports WHERE id = ?').bind(id).first<Row>();
-  return row ? { ...toReport(row), hash: String(row.hash) } : null;
+export async function findReport(db: D1Database, id: string): Promise<Report | null> {
+  const row = await db.prepare(`SELECT ${REPORT_COLUMNS} FROM reports WHERE id = ?`).bind(id).first<ReportRow>();
+  return row ? toReport(row) : null;
+}
+
+/** 去重与计算版本号只需要摘要和版本，不读全文。 */
+export async function findReportState(db: D1Database, id: string): Promise<{ hash: string; revision: number } | null> {
+  const row = await db.prepare('SELECT hash, revision FROM reports WHERE id = ?').bind(id).first<{ hash: string; revision: number }>();
+  return row ? { hash: String(row.hash), revision: Number(row.revision) } : null;
+}
+
+export async function existsForDateTopic(db: D1Database, date: string, topic: ReportTopic): Promise<boolean> {
+  return (await db.prepare('SELECT 1 AS found FROM reports WHERE date = ? AND topic = ? LIMIT 1').bind(date, topic).first()) !== null;
 }
 
 export interface ReportWrite {
@@ -44,28 +62,25 @@ export interface ReportWrite {
   revision: number;
 }
 
-const UPSERT = `INSERT INTO reports (id,date,title,topic,raw,hash,source,source_file_id,imported_at,revision) VALUES (?,?,?,?,?,?,?,?,?,?)
+const ARCHIVE_PREVIOUS = 'INSERT INTO report_versions (id,report_id,raw,hash,saved_at) SELECT ?, id, raw, hash, ? FROM reports WHERE id = ?';
+
+const UPSERT = `INSERT INTO reports (${REPORT_COLUMNS},hash) VALUES (?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET date=excluded.date,title=excluded.title,topic=excluded.topic,raw=excluded.raw,hash=excluded.hash,source=excluded.source,source_file_id=excluded.source_file_id,imported_at=excluded.imported_at,revision=excluded.revision`;
 
-/** 原子地：先把旧版本存入历史，再写入新版本。 */
-export async function saveReport(db: D1Database, next: ReportWrite, previous: StoredReport | null, savedAt: string): Promise<void> {
-  const statements: D1PreparedStatement[] = [];
-  if (previous) {
-    statements.push(
-      db
-        .prepare('INSERT INTO report_versions (id,report_id,raw,hash,saved_at) VALUES (?,?,?,?,?)')
-        .bind(crypto.randomUUID(), previous.id, previous.raw, previous.hash, savedAt),
-    );
-  }
-  statements.push(
+/**
+ * 原子地：先在库内把当前版本复制进历史（全文不经过 Worker），再写入新版本。
+ * 记录不存在时复制语句不产生任何行。
+ */
+export async function saveReport(db: D1Database, next: ReportWrite, savedAt: string): Promise<void> {
+  await db.batch([
+    db.prepare(ARCHIVE_PREVIOUS).bind(crypto.randomUUID(), savedAt, next.id),
     db
       .prepare(UPSERT)
-      .bind(next.id, next.date, next.title, next.topic, next.raw, next.hash, next.source, next.sourceFileId, next.importedAt, next.revision),
-  );
-  await db.batch(statements);
+      .bind(next.id, next.date, next.title, next.topic, next.source, next.sourceFileId, next.raw, next.importedAt, next.revision, next.hash),
+  ]);
 }
 
 export async function readBack(db: D1Database, id: string): Promise<{ raw: string; hash: string } | null> {
-  const row = await db.prepare('SELECT raw, hash FROM reports WHERE id = ?').bind(id).first<Row>();
+  const row = await db.prepare('SELECT raw, hash FROM reports WHERE id = ?').bind(id).first<{ raw: string; hash: string }>();
   return row ? { raw: String(row.raw), hash: String(row.hash) } : null;
 }

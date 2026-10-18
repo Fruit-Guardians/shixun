@@ -1,5 +1,5 @@
-import { MAX_SYNC_COUNT, SYNC_STALE_MS, ValidationError } from '#shared';
-import type { SyncRunInput, SyncState } from '#shared';
+import { SYNC_STALE_MS, validateSyncRun } from '#shared';
+import type { SyncState } from '#shared';
 import { insertSyncRun, latestSyncRun } from '../repositories/sync-runs.ts';
 
 const EMPTY: SyncState = {
@@ -15,10 +15,10 @@ const EMPTY: SyncState = {
 };
 
 /** 只反映 Google 脚本真实上报的回执；没有回执就是「等待授权」，绝不伪造运行状态。 */
-export async function getSyncState(db: D1Database, now = Date.now()): Promise<SyncState> {
+export async function getSyncState(db: D1Database, now: Date): Promise<SyncState> {
   const run = await latestSyncRun(db);
   if (!run) return EMPTY;
-  const stale = now - Date.parse(run.receivedAt) > SYNC_STALE_MS;
+  const stale = now.getTime() - Date.parse(run.receivedAt) > SYNC_STALE_MS;
   const state = !run.triggerInstalled ? 'disabled' : run.failed > 0 ? 'attention' : stale ? 'stale' : 'active';
   return {
     ...EMPTY,
@@ -32,26 +32,9 @@ export async function getSyncState(db: D1Database, now = Date.now()): Promise<Sy
   };
 }
 
-const COUNT_KEYS = ['created', 'updated', 'unchanged', 'failed'] as const;
-
-function parseRun(input: unknown): Required<Omit<SyncRunInput, 'checkedAt'>> & { checkedAt?: string } {
-  if (!input || typeof input !== 'object') throw new ValidationError('同步状态格式无效。');
-  const value = input as Record<string, unknown>;
-  if (typeof value.triggerInstalled !== 'boolean') throw new ValidationError('缺少 Google 触发器实际安装状态。');
-
-  const counts = {} as Record<(typeof COUNT_KEYS)[number], number>;
-  for (const key of COUNT_KEYS) {
-    const n = value[key] ?? 0;
-    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > MAX_SYNC_COUNT) throw new ValidationError('同步统计无效。');
-    counts[key] = n;
-  }
-  const checkedAt = typeof value.checkedAt === 'string' && !Number.isNaN(Date.parse(value.checkedAt)) ? value.checkedAt : undefined;
-  return { triggerInstalled: value.triggerInstalled, ...counts, checkedAt };
-}
-
-export async function recordSyncRun(db: D1Database, input: unknown): Promise<SyncState> {
-  const run = parseRun(input);
-  const now = new Date().toISOString();
-  await insertSyncRun(db, { ...run, receivedAt: now, checkedAt: run.checkedAt ?? now });
-  return getSyncState(db);
+export async function recordSyncRun(db: D1Database, input: unknown, now: Date): Promise<SyncState> {
+  const run = validateSyncRun(input);
+  const receivedAt = now.toISOString();
+  await insertSyncRun(db, { ...run, receivedAt, checkedAt: run.checkedAt ?? receivedAt });
+  return getSyncState(db, now);
 }

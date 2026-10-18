@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ORIGIN, USER_HEADERS, createHarness, sampleRaw, seeds } from './helpers/harness.ts';
-import type { ReportsResponse } from '#shared';
+import { ORIGIN, PROGRAM_HEADERS, USER_HEADERS, createHarness, sampleRaw, seeds } from './helpers/harness.ts';
+import type { Report, ReportsResponse } from '#shared';
+import { compareReports } from '../../packages/api/src/services/reports.ts';
 
 const body = { raw: sampleRaw, date: '2026-10-16', topic: '全球技术社区' as const };
 
@@ -41,7 +42,7 @@ test('import rejects cross-origin browsers (CSRF)', async () => {
 });
 
 test('import is idempotent, versions updates and reads back exact text', async () => {
-  const h = createHarness({}, false);
+  const h = createHarness({}, { withSeeds: false });
   const post = (raw: string) => h.call('/api/reports', { method: 'POST', json: { ...body, raw }, headers: USER_HEADERS });
 
   const created = (await (await post(sampleRaw)).json()) as { id: string; status: string; revision: number };
@@ -56,9 +57,10 @@ test('import is idempotent, versions updates and reads back exact text', async (
   assert.equal(updated.status, 'updated');
   assert.equal(updated.revision, 2);
 
-  const versions = h.DB.raw.prepare('SELECT raw FROM report_versions WHERE report_id = ?').all(created.id) as { raw: string }[];
+  const versions = h.DB.raw.prepare('SELECT raw, hash FROM report_versions WHERE report_id = ?').all(created.id) as { raw: string; hash: string }[];
   assert.equal(versions.length, 1);
   assert.equal(versions[0].raw, sampleRaw);
+  assert.equal(versions[0].hash, (created as unknown as { hash: string }).hash);
 
   const download = await h.call(`/api/reports/${encodeURIComponent(created.id)}`);
   assert.equal(await download.text(), changed);
@@ -87,9 +89,86 @@ test('download serves seeds verbatim as an attachment and 404s unknown ids', asy
 
 test('a stored report supersedes a legacy seed for the same date and topic', async () => {
   const legacy = seeds.find((s) => s.source === '用户提供的历史文案');
-  if (!legacy) return;
+  assert.ok(legacy);
   const h = createHarness();
   await h.call('/api/reports', { method: 'POST', json: { raw: legacy.raw + '\n新版', date: legacy.date, topic: legacy.topic }, headers: USER_HEADERS });
   const data = (await (await h.call('/api/reports')).json()) as ReportsResponse;
   assert.equal(data.reports.filter((r) => r.date === legacy.date && r.topic === legacy.topic).length, 1);
+});
+
+test('a Drive import with a different id hides the legacy seed in the list and on download', async () => {
+  const legacy = seeds.find((s) => s.source === '用户提供的历史文案');
+  assert.ok(legacy);
+  const h = createHarness();
+  const payload = { raw: legacy.raw + '\nDrive 版', date: legacy.date, topic: legacy.topic, sourceFileId: '1AA9Z4C-qdLryYO4Vwsr5cvaqfkt1nrsX' };
+  assert.equal((await h.call('/api/sync', { method: 'POST', json: payload, headers: PROGRAM_HEADERS })).status, 200);
+
+  const data = (await (await h.call('/api/reports')).json()) as ReportsResponse;
+  const slot = data.reports.filter((r) => r.date === legacy.date && r.topic === legacy.topic);
+  assert.deepEqual(slot.map((r) => r.id), ['drive-1AA9Z4C-qdLryYO4Vwsr5cvaqfkt1nrsX']);
+  assert.equal(data.drive.status, 'imported');
+  assert.equal((await h.call(`/api/reports/${encodeURIComponent(legacy.id)}`)).status, 404);
+});
+
+test('download looks up one report instead of loading the whole archive', async () => {
+  const h = createHarness();
+  await h.call('/api/reports', { method: 'POST', json: body, headers: USER_HEADERS });
+  const seen: string[] = [];
+  const prepare = h.DB.prepare.bind(h.DB);
+  h.DB.prepare = (sql: string) => {
+    seen.push(sql);
+    return prepare(sql);
+  };
+  assert.equal((await h.call('/api/reports/2026-10-16_global')).status, 200);
+  assert.equal((await h.call(`/api/reports/${encodeURIComponent(seeds[2].id)}`)).status, 200);
+  assert.ok(seen.length > 0);
+  assert.ok(seen.every((sql) => /WHERE/.test(sql)), seen.join('\n'));
+});
+
+test('reports sort newest first, and the global edition leads within a day regardless of input order', () => {
+  const r = (date: string, topic: Report['topic']) => ({ id: `${date}-${topic}`, date, topic }) as Report;
+  const expected = ['2026-10-17-全球技术社区', '2026-10-17-安全专题', '2026-10-16-全球技术社区'];
+  for (const input of [
+    [r('2026-10-17', '安全专题'), r('2026-10-16', '全球技术社区'), r('2026-10-17', '全球技术社区')],
+    [r('2026-10-17', '全球技术社区'), r('2026-10-17', '安全专题'), r('2026-10-16', '全球技术社区')],
+  ]) {
+    assert.deepEqual(input.sort(compareReports).map((x) => x.id), expected);
+  }
+});
+
+test('unknown topics are rejected instead of silently becoming the global edition', async () => {
+  const h = createHarness();
+  const res = await h.call('/api/reports', { method: 'POST', json: { ...body, topic: '安全' }, headers: USER_HEADERS });
+  assert.equal(res.status, 400);
+  assert.match(((await res.json()) as { error: string }).error, /主题/);
+});
+
+test('storage failures during import are 503 and leave the archive unchanged', async () => {
+  const h = createHarness({}, { withSeeds: false });
+  h.DB.batch = async () => {
+    throw new Error('D1 down');
+  };
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const res = await h.call('/api/reports', { method: 'POST', json: body, headers: USER_HEADERS });
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { error: '导入暂时失败，原文件保持不变。' });
+  } finally {
+    console.error = original;
+  }
+  assert.equal((h.DB.raw.prepare('SELECT COUNT(*) AS n FROM reports').get() as { n: number }).n, 0);
+});
+
+test('a readback mismatch is reported as a retryable 503', async () => {
+  const h = createHarness({}, { withSeeds: false });
+  const prepare = h.DB.prepare.bind(h.DB);
+  h.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (!sql.startsWith('SELECT raw, hash')) return statement;
+    return Object.assign(statement, { first: async () => ({ raw: 'truncated', hash: 'x' }) });
+  };
+  const res = await h.call('/api/reports', { method: 'POST', json: body, headers: USER_HEADERS });
+  assert.equal(res.status, 503);
+  assert.match(((await res.json()) as { error: string }).error, /回读校验失败/);
 });

@@ -59,6 +59,16 @@ export interface SyncRunInput {
   failed?: number;
 }
 
+/** 校验通过的运行回执；未上报的计数按 0 计。 */
+export interface ValidatedSyncRun {
+  triggerInstalled: boolean;
+  checkedAt: string | null;
+  created: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+}
+
 /** 导入请求体（手动导入与程序同步共用）。 */
 export interface ImportRequest {
   raw: string;

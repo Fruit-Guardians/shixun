@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { storiesFor, sectionsFor, isValidDate, validateImport, tagsFor, ValidationError, countLinks } from '#shared';
+import { storiesFor, sectionsFor, isValidDate, validateImport, validateSyncRun, tagsFor, ValidationError, countLinks } from '#shared';
 import type { Report } from '#shared';
 
 const seeds: Report[] = JSON.parse(fs.readFileSync(new URL('../../data/seed-reports.json', import.meta.url), 'utf8'));
@@ -49,6 +49,32 @@ test('manual import ids derive from date and topic', () => {
   const raw = seeds[0].raw;
   assert.equal(validateImport({ raw, date: '2026-10-16' }).id, '2026-10-16_global');
   assert.equal(validateImport({ raw, date: '2026-10-16', topic: '安全专题' }).id, '2026-10-16_security');
+});
+
+test('topic defaults when omitted but unknown topics are rejected', () => {
+  const raw = seeds[0].raw;
+  assert.equal(validateImport({ raw, date: '2026-10-16', topic: null }).topic, '全球技术社区');
+  assert.throws(() => validateImport({ raw, date: '2026-10-16', topic: 'security' }), ValidationError);
+  assert.throws(() => validateImport({ raw, date: '2026-10-16', topic: '' }), ValidationError);
+});
+
+test('program sync can require a Drive file id; arrays are not import bodies', () => {
+  const raw = seeds[0].raw;
+  assert.throws(() => validateImport({ raw, date: '2026-10-16' }, { requireSourceFileId: true }), /Drive 文件 ID/);
+  assert.throws(() => validateImport([raw]), ValidationError);
+});
+
+test('sync run receipts default missing counts and drop unparseable timestamps', () => {
+  assert.deepEqual(validateSyncRun({ triggerInstalled: true, created: 2, checkedAt: 'nope' }), {
+    triggerInstalled: true,
+    checkedAt: null,
+    created: 2,
+    updated: 0,
+    unchanged: 0,
+    failed: 0,
+  });
+  assert.throws(() => validateSyncRun([]), ValidationError);
+  assert.throws(() => validateSyncRun({ triggerInstalled: true, failed: 10_001 }), ValidationError);
 });
 
 test('countLinks counts raw URLs', () => {

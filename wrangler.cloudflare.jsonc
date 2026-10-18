@@ -14,7 +14,7 @@
       "binding": "DB",
       "database_name": "shixun",
       // 运行 `npx wrangler d1 create shixun` 后，把输出的 database_id 填在这里。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b248bf65-37b1-49ab-b170-b6880dc91c15",
       "migrations_dir": "drizzle"
     }
   ],

@@ -5,6 +5,7 @@ import type { Category, ImportRequest } from '#shared';
 import { createApiClient } from './api/client.ts';
 import type { ApiClient } from './api/client.ts';
 import BrowseView from './components/BrowseView.tsx';
+import CommandPalette from './components/CommandPalette.tsx';
 import { LoadingState } from './components/EmptyState.tsx';
 import ImportDialog from './components/ImportDialog.tsx';
 import ReaderView from './components/ReaderView.tsx';
@@ -37,7 +38,7 @@ export interface AppProps {
   api?: ApiClient;
 }
 
-type Modal = 'import' | 'sync' | null;
+type Modal = 'import' | 'sync' | 'command' | null;
 
 export default function App({ initial, api = defaultApi }: AppProps) {
   const archive = useArchive(api, initial);
@@ -60,11 +61,6 @@ export default function App({ initial, api = defaultApi }: AppProps) {
   // 地址栏颜色跟随配色与明暗。
   useEffect(syncThemeColor, [theme, palette]);
 
-  useShortcuts({
-    onSearch: useCallback(() => searchRef.current?.focus(), []),
-    onEscape: useCallback(() => setMobileNav(false), []),
-  });
-
   const leaveReader = useCallback(() => {
     closeReport();
     setMobileNav(false);
@@ -77,6 +73,22 @@ export default function App({ initial, api = defaultApi }: AppProps) {
       leaveReader();
     },
     [leaveReader],
+  );
+
+  useShortcuts({
+    onCommand: useCallback(() => setModal((m) => (m === 'command' ? null : 'command')), []),
+    onSearch: useCallback(() => searchRef.current?.focus(), []),
+    onView: navigate,
+    onEscape: useCallback(() => setMobileNav(false), []),
+  });
+
+  const search = useCallback(
+    (query: string) => {
+      dispatch({ type: 'set-query', query });
+      if (reading) leaveReader();
+      else scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [reading, leaveReader],
   );
 
   const focusCategory = useCallback(
@@ -157,6 +169,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         onToggleTheme={toggleTheme}
         onToggleMobileNav={() => setMobileNav((open) => !open)}
         onImport={() => setModal('import')}
+        onCommand={() => setModal('command')}
       />
       <div className="app-shell">
         <Sidebar
@@ -209,6 +222,22 @@ export default function App({ initial, api = defaultApi }: AppProps) {
       <Toast message={toast} />
       <ImportDialog open={modal === 'import'} onOpenChange={(open) => setModal(open ? 'import' : null)} onSubmit={handleImport} />
       <SyncDialog open={modal === 'sync'} onOpenChange={(open) => setModal(open ? 'sync' : null)} api={api} sync={archive.sync} onRefresh={handleRefresh} />
+      <CommandPalette
+        open={modal === 'command'}
+        onOpenChange={(open) => setModal(open ? 'command' : null)}
+        reports={archive.reports}
+        theme={theme}
+        palette={palette}
+        onNavigate={navigate}
+        onOpenReport={openReport}
+        onCategory={focusCategory}
+        onSearch={search}
+        onPalette={setPalette}
+        onToggleTheme={toggleTheme}
+        onImport={() => setModal('import')}
+        onOpenSync={() => setModal('sync')}
+        onRefresh={handleRefresh}
+      />
       <BackToTop show={showBackToTop} />
     </>
   );

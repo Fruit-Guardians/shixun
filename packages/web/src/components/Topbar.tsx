@@ -1,4 +1,4 @@
-import { Menu, Moon, Plus, Sun } from 'lucide-react';
+import { Menu, Moon, Plus, SquareTerminal, Sun } from 'lucide-react';
 import type { Palette, Theme } from '../lib/theme.ts';
 import type { View } from '../state/browse.ts';
 import PalettePicker from './PalettePicker.tsx';
@@ -14,6 +14,8 @@ interface TopbarProps {
   onToggleTheme: () => void;
   onToggleMobileNav: () => void;
   onImport: () => void;
+  /** 打开 ⌘K 命令面板。 */
+  onCommand?: () => void;
 }
 
 const NAV: { view: View; label: string }[] = [
@@ -22,7 +24,7 @@ const NAV: { view: View; label: string }[] = [
   { view: 'saved', label: '稍后阅读' },
 ];
 
-export default function Topbar({ view, reading, savedCount, theme, palette, onPalette, onNavigate, onToggleTheme, onToggleMobileNav, onImport }: TopbarProps) {
+export default function Topbar({ view, reading, savedCount, theme, palette, onPalette, onNavigate, onToggleTheme, onToggleMobileNav, onImport, onCommand }: TopbarProps) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -43,6 +45,12 @@ export default function Topbar({ view, reading, savedCount, theme, palette, onPa
           ))}
         </nav>
         <div className="header-actions">
+          {onCommand && (
+            <button className="btn btn-ghost cmd-trigger" aria-label="打开命令面板" aria-keyshortcuts="Meta+K Control+K" onClick={onCommand}>
+              <SquareTerminal size={16} />
+              <kbd>⌘K</kbd>
+            </button>
+          )}
           <button className="btn btn-ghost btn-icon mobile-menu" aria-label="展开分类导航" onClick={onToggleMobileNav}>
             <Menu size={18} />
           </button>

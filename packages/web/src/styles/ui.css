@@ -436,3 +436,27 @@ mark{background:var(--warn);color:#111;padding:0 1px}
 @media(max-width:860px){.palette-picker{position:static}.palette-menu{right:16px;top:calc(100% + 6px)}}
 @media(max-width:480px){.hero-date small:first-child{display:none}}
 
+/* ⌘K 命令面板 */
+.cmd-trigger{gap:6px;padding:0 10px;color:var(--ink-3)}
+.cmd-trigger kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line-2);padding:0 5px;line-height:18px}
+.cmdk-modal{max-width:620px!important;top:18%!important;translate:-50% 0!important;overflow:hidden!important}
+.cmdk-esc{font-family:var(--mono);font-size:10px;border:1px solid var(--line-2);padding:0 5px;color:var(--ink-3)}
+.cmdk-input{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;border-bottom:2px solid var(--frame)}
+.cmdk-input .prompt{font-weight:800}
+.cmdk-input input{flex:1;min-width:0;height:100%;border:0;outline:none;background:none;font-size:15px;caret-color:var(--accent)}
+.cmdk-input input::placeholder{color:var(--ink-3)}
+[cmdk-list]{max-height:min(380px,52dvh);overflow-y:auto;overscroll-behavior:contain;padding:6px;scroll-padding:6px}
+[cmdk-group-heading]{padding:8px 10px 4px;font-size:11px;letter-spacing:.12em;color:var(--ink-3)}
+[cmdk-group-heading]:before{content:'# ';color:var(--accent-text)}
+[cmdk-item]{display:flex;align-items:center;gap:10px;padding:7px 10px;font-size:13px;color:var(--ink-2);cursor:pointer;border-left:2px solid transparent;user-select:none}
+[cmdk-item][data-selected=true]{background:var(--accent-soft);color:var(--accent-text);border-left-color:var(--accent);font-weight:700}
+[cmdk-item][data-selected=true] .cmdk-label:before{content:'> '}
+.cmdk-label{display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmdk-hint{margin-left:auto;font-size:12px;color:var(--ink-3);font-weight:400;white-space:nowrap;font-family:var(--read)}
+.cmdk-enter{opacity:0;color:var(--accent-text)}
+[cmdk-item][data-selected=true] .cmdk-enter{opacity:1}
+.cmdk-swatch{width:14px;height:14px;border-width:2px;box-shadow:none}
+[cmdk-empty]{padding:22px 12px;font-size:13px;text-align:center}
+.cmdk-foot{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 16px;border-top:2px solid var(--frame);background:var(--surface-2);font-size:11px;color:var(--ink-3)}
+.cmdk-foot kbd{font-family:var(--mono);border:1px solid var(--line-2);padding:0 4px;margin-right:2px}
+@media(max-width:860px){.cmd-trigger kbd{display:none}.cmd-trigger{width:36px;padding:0}.cmdk-modal{top:10%!important}.cmdk-foot span:last-child{display:none}}

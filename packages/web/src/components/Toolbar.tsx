@@ -54,7 +54,7 @@ export function Toolbar({ title, count, density, query, refreshing, searchRef, o
               <X size={14} />
             </button>
           ) : (
-            <kbd>⌘K</kbd>
+            <kbd>/</kbd>
           )}
         </label>
         <button className="btn btn-icon" aria-label="刷新归档" disabled={refreshing} onClick={onRefresh}>

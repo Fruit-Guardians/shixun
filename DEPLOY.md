@@ -1,8 +1,12 @@
-# 部署到 Cloudflare Workers + D1（Cloudflare Access 保护）
+# 部署到 Cloudflare Workers + D1（公开阅读，Cloudflare Access 保护写操作）
 
-整个站点（页面和接口）都在 Cloudflare Access 后面。Access 负责登录；Worker 自己再校验 Access 签发的 JWT，
-所以即使有人绕过 Access 直连 Worker，或者伪造身份头，也拿不到数据、写不进去。Google Apps Script 用 Access
-**服务令牌**同步。
+站点对互联网公开：任何人都能浏览归档、阅读和下载原文、搜索、看版本历史。Cloudflare Access 只保护两个路径：
+
+- `/login`：所有者登录入口。登录后 Access 在本站域名写下 `CF_Authorization` cookie，之后在任意页面都能导入、删除、恢复版本。
+- `/api/sync`（含 `/api/sync/status`）：只给 Google Apps Script 的 Access **服务令牌**用。
+
+Worker 自己校验 Access 签发的 JWT（请求头或 cookie），只认 `OWNER_EMAILS` 里的邮箱做写操作，
+所以伪造身份头、绕过 Access 都写不进去。
 
 免费额度够用：Workers Free、D1 Free、Zero Trust Free（50 人以内）都不需要绑卡。
 
@@ -26,16 +30,19 @@ npm run build:cloudflare
 npm run deploy:cloudflare     # 先对远程 D1 执行 drizzle/ 下尚未执行的迁移，再部署 Worker
 ```
 
-部署完成会打印地址，形如 `https://shixun.<你的子域>.workers.dev`。此时还没有配置 AUD，Worker
-对所有请求都返回 403（配置缺失时宁可拒绝），这是预期的。
+部署完成会打印地址，形如 `https://shixun.<你的子域>.workers.dev`。此时已经可以公开浏览；还没有配置 AUD，
+所有写操作和同步都会被拒绝（配置缺失时宁可拒绝），这是预期的。
 
-## 3. 用 Access 保护 workers.dev 地址
+## 3. 用 Access 保护登录入口和同步接口
 
-1. Cloudflare 后台 → Workers & Pages → `shixun` → 设置 → 域和路由 → `workers.dev` 一行 →
-   启用 **Cloudflare Access**。它会在 Zero Trust 里创建一个 Access 应用。
-   （也可以在 Zero Trust → Access → 应用程序 → 添加 → 自托管，域名填 `shixun.<你的子域>.workers.dev`。）
-2. 在 Zero Trust → Access → 应用程序里打开这个应用，检查策略：
+不要在 Workers & Pages → `shixun` → 设置 → 域和路由里给 `workers.dev` 启用 Cloudflare Access：那会把整个站点藏到登录后面。
+
+1. Zero Trust → Access → 应用程序 → 添加 → 自托管，添加两个公共主机名（同一个应用，共用一个 AUD）：
+   - `shixun.<你的子域>.workers.dev`，路径 `login`
+   - `shixun.<你的子域>.workers.dev`，路径 `api/sync`（`/api/sync/status` 自动包含在内）
+2. 策略：
    - 一条 **Allow** 策略，包含（Include）→ 电子邮件 → 只填你自己的邮箱。不要用「Everyone」。
+   - 第 4 步创建服务令牌后，再加一条 **Service Auth** 策略。
 3. 在应用的概述（Overview）里复制 **Application Audience (AUD) Tag**。
 4. 把 AUD 和所有者邮箱设为 Worker 的 secret（部署不会覆盖 secret）：
 
@@ -47,13 +54,14 @@ npm run deploy:cloudflare     # 先对远程 D1 执行 drizzle/ 下尚未执行�
 团队域名 `tiny-silence-378c.cloudflareaccess.com` 已写在配置的 `vars` 里。如果换了团队，在
 Zero Trust → 设置 → 自定义页面（或团队域名设置）里查看，并修改 `CF_ACCESS_TEAM_DOMAIN`。
 
-打开站点地址：会先跳到 Access 登录，登录后能看到归档。删除、恢复版本只对 `OWNER_EMAILS` 里的账号开放。
+打开站点地址直接就能浏览。需要导入、删除或恢复版本时，先访问 `https://shixun.<你的子域>.workers.dev/login`，
+Access 登录完成后会回到首页；登录有效期由 Access 应用的会话时长决定，过期后再访问一次 `/login`。
 
 ## 4. 给 Google Apps Script 创建服务令牌
 
 1. Zero Trust → Access → 服务凭据（Service credentials）→ 服务令牌 → 创建。
    复制 **Client ID** 和 **Client Secret**（Secret 只显示这一次）。
-2. 回到第 3 步的 Access 应用，再加一条策略：操作（Action）选 **Service Auth**，包含 → Service Token → 选刚创建的令牌。
+2. 回到第 3 步的 Access 应用，加上第 3 步提到的策略：操作（Action）选 **Service Auth**，包含 → Service Token → 选刚创建的令牌。
 3. 在 Apps Script 项目设置 → 脚本属性中添加：
    - `CF_ACCESS_CLIENT_ID` = Client ID
    - `CF_ACCESS_CLIENT_SECRET` = Client Secret
@@ -73,7 +81,7 @@ Worker 只接受**服务令牌**的 JWT 调用 `/api/sync*`：普通登录用户
 CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=… SMOKE_BASE_URL=https://shixun.<你的子域>.workers.dev npm run smoke
 ```
 
-服务令牌只用来通过 Access；冒烟检查只读，同时确认所有未授权写操作都被拒绝。
+服务令牌只用来通过 `/api/sync` 上的 Access；冒烟检查只读，同时确认所有未授权写操作都被拒绝。不带令牌也能跑，只是同步状态那一项会被 Access 拦下。
 
 ## 6.（可选）推送即部署：连接 GitHub
 
@@ -89,8 +97,8 @@ Worker 名称必须和配置里的 `name`（`shixun`）一致。之后每次推�
 
 ## 安全要点
 
-- `preview_urls` 已关闭：预览地址不在 Access 应用范围内。
-- 如果以后绑定自定义域名，必须把这个域名也加入 Access 应用，否则 Worker 会因为没有 JWT 而对所有请求返回 403。
+- `preview_urls` 已关闭：预览地址不在 Access 应用范围内，同步接口在那里拿不到服务令牌 JWT。
+- 如果以后绑定自定义域名，要把这个域名的 `/login` 和 `/api/sync` 也加入 Access 应用，否则在新域名上无法登录和同步（阅读不受影响）。
 - `AUTH_PROVIDER=cloudflare-access` 时，`oai-authenticated-user-*` 等明文身份头一律忽略。不要在 Cloudflare 上去掉这个变量：
   未设置时 API 会信任这些头，只适合 Sites。
 - 站点「数据与同步」里的「复制站点连接凭证」在 Access 部署下会提示改用服务令牌，站点不保存服务令牌。

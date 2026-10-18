@@ -37,7 +37,7 @@ npm test                              # 仅测试（Node 内置测试运行器�
 
 数据库迁移与构建按 Sites 工作流执行。生产数据库与本地数据库独立。
 
-直接部署到 Cloudflare Workers + D1（Cloudflare Access 保护）：见 [DEPLOY.md](DEPLOY.md)。
+直接部署到 Cloudflare Workers + D1（公开阅读，写操作由 Cloudflare Access 保护）：见 [DEPLOY.md](DEPLOY.md)。
 
 ## 自动同步
 源目录：`1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT`。
@@ -45,7 +45,7 @@ npm test                              # 仅测试（Node 内置测试运行器�
 
 `SITE_SERVICE_TOKEN` 仅存 Google 脚本属性；站点对应 `SITES_SERVICE_ACCESS` 是后台 secret。前端显式点击、同源且登录后才能复制（可选设置 `OWNER_EMAILS` 限定为所有者邮箱），不写入脚本包或客户端源码。Google 授权包括只读 Drive、外部请求和触发器管理；代码只枚举指定源目录。
 
-这是仅所有者可访问的网站。部署在 Cloudflare 时由 Access 把关，API 自己校验 Access JWT，`/api/sync` 只接受服务令牌（见 DEPLOY.md）。部署在 Sites 时，`/api/sync` 的授权边界是 Sites 私有访问控制，`X-Sites-Report-Sync: google-apps-script` 仅标识协议。旧 `google-drive` 协议返回410。若未来调整为公开，必须先重新设计写入与设置凭证接口的独立授权。
+部署在 Cloudflare 时站点公开可读；导入、删除、恢复只对所有者开放：所有者通过 Access 保护的 `/login` 登录，API 自己校验 Access JWT（请求头或 `CF_Authorization` cookie），`/api/sync` 只接受服务令牌（见 DEPLOY.md）。部署在 Sites 时网站仅所有者可访问，`/api/sync` 的授权边界是 Sites 私有访问控制，`X-Sites-Report-Sync: google-apps-script` 仅标识协议。旧 `google-drive` 协议返回410。若未来调整为公开，必须先重新设计写入与设置凭证接口的独立授权。
 
 `sync_runs` 只记录 Google 程序真实回执。尚未收到记录显示待授权；触发器未安装显示停用；失败显示待检查；一小时未收到回执显示延迟。不要通过生产测试伪造已安装状态。
 

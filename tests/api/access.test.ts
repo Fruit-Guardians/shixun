@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accessGate, createAccessVerifier } from '#api';
+import { accessLoginRedirect, createAccessVerifier } from '#api';
 import type { ApiEnv } from '#api';
 import { apiPaths } from '#shared';
 import type { IngestResult } from '#shared';
 import { ORIGIN, PROGRAM_HEADERS, USER_HEADERS, createHarness, sampleRaw } from './helpers/harness.ts';
 
-/** Cloudflare Access 模式：只认签名 JWT，明文身份头与协议头都不能单独放行。 */
+/** Cloudflare Access 模式：站点公开可读；写操作只认签名 JWT（请求头或 cookie），明文身份头与协议头都不能单独放行。 */
 
 const TEAM = 'team.cloudflareaccess.com';
 const AUD = 'aud-tag';
@@ -52,11 +52,13 @@ function harness(env: Partial<ApiEnv> = ENV, certs: () => Response = () => Respo
 }
 
 const asUser = async (email?: string) => ({ 'cf-access-jwt-assertion': await userToken(email) });
+const withCookie = async (token: Promise<string>) => ({ cookie: `theme=dark; CF_Authorization=${await token}`, origin: ORIGIN });
 
 test('forged identity headers are ignored once Access is the auth provider', async () => {
   const h = harness();
-  const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: USER_HEADERS });
+  const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...USER_HEADERS, origin: ORIGIN } });
   assert.equal(res.status, 401);
+  assert.match(((await res.json()) as { error: string }).error, /\/login/);
   const del = await h.call(apiPaths.report('x'), { method: 'DELETE', headers: { ...USER_HEADERS, origin: ORIGIN } });
   assert.equal(del.status, 401);
   // 协议头本身不是凭证。
@@ -64,18 +66,44 @@ test('forged identity headers are ignored once Access is the auth provider', asy
   assert.equal((await h.call(apiPaths.syncStatus, { method: 'POST', json: {}, headers: PROGRAM_HEADERS })).status, 403);
 });
 
-test('a signed user JWT imports; owner actions need the email in OWNER_EMAILS', async () => {
+test('only the owner imports; owner actions need the email in OWNER_EMAILS', async () => {
   const h = harness();
-  const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser('reader@example.com') });
+  const reader = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...(await asUser('reader@example.com')), origin: ORIGIN } });
+  assert.equal(reader.status, 403);
+  assert.equal(((await reader.json()) as { code: string }).code, 'not_owner');
+  // 页面导入必须同源。
+  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser() })).status, 403);
+  const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...(await asUser('OWNER@example.com')), origin: ORIGIN } });
   assert.equal(res.status, 200);
   const { id } = (await res.json()) as IngestResult;
 
   const denied = await h.call(apiPaths.report(id), { method: 'DELETE', headers: { ...(await asUser('reader@example.com')), origin: ORIGIN } });
   assert.equal(denied.status, 403);
   assert.equal(((await denied.json()) as { code: string }).code, 'not_owner');
-  // 同源要求不变。
   assert.equal((await h.call(apiPaths.report(id), { method: 'DELETE', headers: await asUser() })).status, 403);
   assert.equal((await h.call(apiPaths.report(id), { method: 'DELETE', headers: { ...(await asUser('OWNER@example.com')), origin: ORIGIN } })).status, 200);
+});
+
+test('reads are public without any Access JWT', async () => {
+  const h = harness();
+  assert.equal((await h.call(apiPaths.health)).status, 200);
+  assert.equal((await h.call(apiPaths.reports)).status, 200);
+  assert.equal((await h.call(`${apiPaths.search}?q=x`)).status, 200);
+  assert.equal(h.fetched.length, 0);
+});
+
+test('the CF_Authorization cookie signs the owner in on public paths, but never as a service token', async () => {
+  const h = harness();
+  const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await withCookie(userToken()) });
+  assert.equal(res.status, 200);
+  const { id } = (await res.json()) as IngestResult;
+  assert.equal((await h.call(apiPaths.report(id), { method: 'DELETE', headers: await withCookie(userToken()) })).status, 200);
+
+  const cookie = (token: Promise<string>) => withCookie(token).then(({ cookie }) => ({ cookie }));
+  assert.equal((await h.call(apiPaths.sync, { method: 'POST', json: body, headers: { ...PROGRAM_HEADERS, ...(await cookie(serviceToken())) } })).status, 403);
+  for (const token of [serviceToken(), userToken('owner@example.com', { exp: nowSeconds() - 3600 }), Promise.resolve('a.b.c')]) {
+    assert.equal((await h.call(apiPaths.report(id), { method: 'DELETE', headers: await withCookie(token) })).status, 401);
+  }
 });
 
 test('without OWNER_EMAILS nobody is owner in Access mode', async () => {
@@ -97,7 +125,7 @@ test('only a service token JWT with the protocol header may sync', async () => {
   assert.equal((await h.call(apiPaths.sync, { method: 'POST', json: body, headers: { ...PROGRAM_HEADERS, ...service, origin: ORIGIN } })).status, 403);
   // 服务令牌不是用户：不能做所有者操作，也不能当登录用户导入。
   assert.equal((await h.call(apiPaths.report('x'), { method: 'DELETE', headers: { ...service, origin: ORIGIN } })).status, 401);
-  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: service })).status, 401);
+  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...service, origin: ORIGIN } })).status, 401);
 });
 
 test('tampered, foreign, expired and unsigned tokens are rejected', async () => {
@@ -117,40 +145,39 @@ test('tampered, foreign, expired and unsigned tokens are rejected', async () => 
     garbage: 'a.b.c',
   };
   for (const [name, token] of Object.entries(tokens)) {
-    const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { 'cf-access-jwt-assertion': token } });
+    const res = await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { 'cf-access-jwt-assertion': token, origin: ORIGIN } });
     assert.equal(res.status, 401, name);
   }
 });
 
 test('missing Access configuration fails closed', async () => {
   const h = harness({ AUTH_PROVIDER: 'cloudflare-access' });
-  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...USER_HEADERS, ...(await asUser()) } })).status, 401);
+  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...USER_HEADERS, ...(await asUser()), origin: ORIGIN } })).status, 401);
   assert.equal(h.fetched.length, 0);
 });
 
 test('public keys are fetched once from the team and reused', async () => {
   const h = harness();
   for (let i = 0; i < 3; i++) {
-    assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser() })).status, 200);
+    assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...(await asUser()), origin: ORIGIN } })).status, 200);
   }
   assert.deepEqual(h.fetched, [`https://${TEAM}/cdn-cgi/access/certs`]);
 });
 
 test('a redirected certs response fails closed instead of being followed', async () => {
   const h = harness(ENV, () => new Response(null, { status: 302, headers: { location: 'https://evil.test/certs' } }));
-  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser() })).status, 401);
+  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: { ...(await asUser()), origin: ORIGIN } })).status, 401);
   assert.deepEqual(h.fetched, [`https://${TEAM}/cdn-cgi/access/certs`]);
 });
 
-test('the worker gate blocks every request without a valid Access JWT, and is off otherwise', async () => {
-  const { verifier } = harness();
-  const env = ENV as ApiEnv;
-  const page = (headers: Record<string, string> = {}) => new Request(`${ORIGIN}/`, { headers });
-  const blocked = await accessGate(page(USER_HEADERS), env, verifier);
-  assert.equal(blocked?.status, 403);
-  assert.equal(await accessGate(page(await asUser('reader@example.com')), env, verifier), null);
-  assert.equal(await accessGate(page({ 'cf-access-jwt-assertion': await serviceToken() }), env, verifier), null);
-  assert.equal(await accessGate(page(), {} as ApiEnv, verifier), null);
+test('/login redirects home in Access mode and is left to the site otherwise', () => {
+  const login = new Request(`${ORIGIN}/login?x=1`);
+  const res = accessLoginRedirect(login, ENV as ApiEnv);
+  assert.equal(res?.status, 302);
+  assert.equal(res?.headers.get('location'), `${ORIGIN}/`);
+  assert.equal(accessLoginRedirect(new Request(`${ORIGIN}/`), ENV as ApiEnv), null);
+  assert.equal(accessLoginRedirect(new Request(`${ORIGIN}/login/x`), ENV as ApiEnv), null);
+  assert.equal(accessLoginRedirect(login, {} as ApiEnv), null);
 });
 
 test('the setup credential points owners at Access service tokens', async () => {

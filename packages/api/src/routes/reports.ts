@@ -1,20 +1,27 @@
 import { MAX_BODY_BYTES } from '#shared';
-import { hasBearerToken, isSameOrigin } from '../auth.ts';
+import { hasBearerToken, isSameOrigin, loginHint } from '../auth.ts';
 import { requireDb } from '../database.ts';
 import { HttpError, SAFE_HEADERS, json, readJsonBody } from '../http.ts';
 import type { Handler } from '../router.ts';
 import { getArchive, ingestReport, readReport } from '../services/reports.ts';
+import { requireOwner } from './owner.ts';
 import { mapServiceErrors } from './service-errors.ts';
 
 /** GET /api/reports — 日报列表、导入状态与真实同步回执。 */
 export const listReportsRoute: Handler = async ({ env, seeds, now }) =>
   json(await mapServiceErrors('reports.list', '归档暂时读取失败，请稍后刷新。', () => getArchive(requireDb(env), seeds, now)));
 
-/** POST /api/reports — 登录用户（或持服务凭证的程序）手动导入。 */
-export const importReportRoute: Handler = async ({ request, env, now, caller }) => {
+/**
+ * POST /api/reports — 手动导入：持服务凭证的程序，或登录用户。
+ * Cloudflare Access 部署下站点公开，只有所有者能从本站页面导入。
+ */
+export const importReportRoute: Handler = async (context) => {
+  const { request, env, now, caller } = context;
   if (!isSameOrigin(request, { allowMissing: true })) throw new HttpError(403, '请求来源不匹配。');
-  if (!(await caller()).user && !hasBearerToken(request, env.INGEST_TOKEN)) {
-    throw new HttpError(401, '请先登录，再导入日报。');
+  if (!hasBearerToken(request, env.INGEST_TOKEN)) {
+    const { user, access } = await caller();
+    if (access) await requireOwner(context, '只有站点所有者可以导入日报。');
+    else if (!user) throw new HttpError(401, loginHint(false, '导入日报'));
   }
 
   const input = await readJsonBody(request, { maxBytes: MAX_BODY_BYTES, tooLarge: '文件过大。', invalid: '提交格式无效。' });

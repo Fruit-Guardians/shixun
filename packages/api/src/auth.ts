@@ -1,5 +1,5 @@
 import { SYNC_PROTOCOL_CURRENT, SYNC_PROTOCOL_HEADER } from '#shared';
-import { ACCESS_JWT_HEADER, defaultAccessVerifier } from './access.ts';
+import { ACCESS_JWT_HEADER } from './access.ts';
 import type { AccessIdentity, AccessVerifier } from './access.ts';
 import type { ApiEnv } from './env.ts';
 
@@ -101,11 +101,33 @@ export function usesAccess(env: ApiEnv): boolean {
   return env.AUTH_PROVIDER === ACCESS_PROVIDER;
 }
 
-/** 读取并校验 Access JWT；未配置团队域名或 AUD 时一律失败（宁可拒绝，不可放行）。 */
+/** Access 登录后写在本站域名下的 cookie，值就是同一份签名 JWT。 */
+export const ACCESS_COOKIE = 'CF_Authorization';
+/** 所有者登录入口：只有这个路径（和 /api/sync）在 Access 应用范围内，其余页面与读取接口公开。 */
+export const ACCESS_LOGIN_PATH = '/login';
+
+function readCookie(request: Request, name: string): string | null {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const index = part.indexOf('=');
+    if (index > 0 && part.slice(0, index).trim() === name) return part.slice(index + 1).trim() || null;
+  }
+  return null;
+}
+
+/**
+ * 读取并校验 Access JWT；未配置团队域名或 AUD 时一律失败（宁可拒绝，不可放行）。
+ * 受 Access 保护的路径由 Access 注入请求头；公开路径上，登录过的浏览器带着 `CF_Authorization` cookie，
+ * 同样验签。cookie 只能证明登录用户，服务令牌必须走请求头。
+ */
 export async function verifyAccess(request: Request, env: ApiEnv, verifier: AccessVerifier): Promise<AccessIdentity | null> {
-  const token = request.headers.get(ACCESS_JWT_HEADER);
-  if (!token || !env.CF_ACCESS_TEAM_DOMAIN || !env.CF_ACCESS_AUD) return null;
-  return verifier.verify(token, { teamDomain: env.CF_ACCESS_TEAM_DOMAIN, aud: env.CF_ACCESS_AUD });
+  if (!env.CF_ACCESS_TEAM_DOMAIN || !env.CF_ACCESS_AUD) return null;
+  const config = { teamDomain: env.CF_ACCESS_TEAM_DOMAIN, aud: env.CF_ACCESS_AUD };
+  const header = request.headers.get(ACCESS_JWT_HEADER);
+  if (header) return verifier.verify(header, config);
+  const cookie = readCookie(request, ACCESS_COOKIE);
+  if (!cookie) return null;
+  const identity = await verifier.verify(cookie, config);
+  return identity?.kind === 'user' ? identity : null;
 }
 
 export async function resolveCaller(request: Request, env: ApiEnv, verifier: AccessVerifier): Promise<Caller> {
@@ -119,15 +141,18 @@ export async function resolveCaller(request: Request, env: ApiEnv, verifier: Acc
   return { user: null, programSync: identity?.kind === 'service' && isProgramSync(request), access: true };
 }
 
+/** 未登录时的提示：Access 模式下告诉用户去哪里登录。 */
+export function loginHint(access: boolean, action: string): string {
+  return access ? `请先访问 ${ACCESS_LOGIN_PATH} 登录，再${action}。` : `请先登录，再${action}。`;
+}
+
 /**
- * Worker 入口的整站闸门：Access 模式下，没有有效 Access JWT 的请求（页面与接口）一律拒绝，
- * 防止绕过 Access 直接访问 Worker（例如未受保护的域名）。非 Access 模式返回 null，不做处理。
+ * Worker 入口：Access 模式下 `/login` 已由 Access 完成登录（cookie 已写入），直接回到首页。
+ * 其他请求返回 null，交给站点处理；页面与读取接口公开，写操作由各接口自己校验身份。
  */
-export async function accessGate(request: Request, env: ApiEnv, verifier: AccessVerifier = defaultAccessVerifier): Promise<Response | null> {
+export function accessLoginRedirect(request: Request, env: ApiEnv): Response | null {
   if (!usesAccess(env)) return null;
-  if (await verifyAccess(request, env, verifier)) return null;
-  return new Response('需要通过 Cloudflare Access 登录后访问。', {
-    status: 403,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, no-store' },
-  });
+  const url = new URL(request.url);
+  if (url.pathname !== ACCESS_LOGIN_PATH) return null;
+  return new Response(null, { status: 302, headers: { Location: new URL('/', url).toString(), 'Cache-Control': 'private, no-store' } });
 }

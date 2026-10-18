@@ -61,10 +61,11 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 ### 信任边界
 身份来源由 `AUTH_PROVIDER` 决定，路由只通过 `context.caller()` 取得调用方（`{ user, programSync, access }`），不直接读请求头。
 
-**Cloudflare Access（`AUTH_PROVIDER=cloudflare-access`，见 DEPLOY.md）**：明文身份头一律忽略，只认 Access 签名的 `Cf-Access-Jwt-Assertion`（`access.ts`：RS256、团队 JWKS、签发方、AUD、有效期，公钥按团队缓存 10 分钟，遇到未知 kid 提前刷新）。
-- Worker 入口（`app/_host/cloudflare-worker.ts`）先过 `accessGate`：没有有效 JWT 的请求，页面和接口一律 403，防止绕过 Access 直连 Worker。
-- 用户 JWT 带邮箱，即登录用户；服务令牌 JWT 没有邮箱，只能用于 `/api/sync*`（仍需协议头、不能来自浏览器），不能当用户导入或做所有者操作。
-- 所有者操作必须配置 `OWNER_EMAILS`；团队域名或 AUD 缺失时一律拒绝。
+**Cloudflare Access（`AUTH_PROVIDER=cloudflare-access`，见 DEPLOY.md）**：站点公开，页面与读取接口不需要身份。明文身份头一律忽略，只认 Access 签名的 JWT（`access.ts`：RS256、团队 JWKS、签发方、AUD、有效期，公钥按团队缓存 10 分钟，遇到未知 kid 提前刷新）。
+- Access 应用只覆盖 `/login` 和 `/api/sync`：这两处由 Access 注入 `Cf-Access-Jwt-Assertion`；其他路径上，所有者浏览器带着登录时写下的 `CF_Authorization` cookie（同一份 JWT），API 同样验签。
+- Worker 入口（`app/_host/cloudflare-worker.ts`）只处理 `/login`：Access 登录完成后 302 回首页。
+- 用户 JWT 带邮箱，即登录用户；服务令牌 JWT 没有邮箱、只认请求头，只能用于 `/api/sync*`（仍需协议头、不能来自浏览器），不能当用户导入或做所有者操作。
+- 导入和所有者操作都要求同源、且邮箱在 `OWNER_EMAILS` 内（必须配置）；团队域名或 AUD 缺失时一律拒绝。
 
 **Sites（未设置 `AUTH_PROVIDER`）**：身份全部来自 Sites 入口，API 不再二次校验。这种模式只能部署在 Sites 后面，否则身份头可以伪造：
 - `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。

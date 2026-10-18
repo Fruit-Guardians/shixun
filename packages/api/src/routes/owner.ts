@@ -1,4 +1,4 @@
-import { isOwner, isSameOrigin } from '../auth.ts';
+import { isOwner, isSameOrigin, loginHint } from '../auth.ts';
 import type { PlatformUser } from '../auth.ts';
 import { HttpError } from '../http.ts';
 import type { RequestContext } from '../router.ts';
@@ -10,7 +10,7 @@ import type { RequestContext } from '../router.ts';
 export async function requireOwner({ request, env, caller }: RequestContext, denied: string): Promise<PlatformUser> {
   if (!isSameOrigin(request, { allowMissing: false })) throw new HttpError(403, '请求来源不匹配。');
   const { user, access } = await caller();
-  if (!user) throw new HttpError(401, '请先登录站点。');
+  if (!user) throw new HttpError(401, access ? loginHint(true, '操作') : '请先登录站点。');
   if (!isOwner(user, env.OWNER_EMAILS, access)) throw new HttpError(403, denied, { code: 'not_owner' });
   return user;
 }

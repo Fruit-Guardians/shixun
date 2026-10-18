@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.3.0
+  version: 3.4.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -11,11 +11,13 @@ info:
     Identity depends on `AUTH_PROVIDER`:
     - unset / `sites`: from the Sites ingress (`oai-authenticated-user-*` headers for signed-in visitors,
       `OAI-Sites-Authorization` for program sync). The API trusts these headers and does not re-verify them.
-    - `cloudflare-access`: only the `Cf-Access-Jwt-Assertion` JWT signed by Cloudflare Access counts (RS256,
-      team issuer, application AUD, expiry). A user JWT carries the email; a service-token JWT (no email) is
-      the only way to call `/api/sync*`, still with `X-Sites-Report-Sync`. Plain identity headers are ignored,
-      requests without a valid JWT are rejected before reaching any route, and owner actions require
-      `OWNER_EMAILS`.
+    - `cloudflare-access`: the site is public; reads need no identity. Only a JWT signed by Cloudflare Access
+      counts (RS256, team issuer, application AUD, expiry), from the `Cf-Access-Jwt-Assertion` header on
+      Access-protected paths (`/login`, `/api/sync*`) or from the `CF_Authorization` cookie elsewhere. A user JWT
+      carries the email; a service-token JWT (no email, header only) is the only way to call `/api/sync*`, still
+      with `X-Sites-Report-Sync`. Plain identity headers are ignored. Imports and owner actions require a
+      same-origin browser request from an email in `OWNER_EMAILS`; signed-out writes get 401 with a hint to
+      visit `/login`.
 paths:
   /api/health:
     get:
@@ -43,7 +45,8 @@ paths:
       summary: Import Markdown as a signed-in visitor, or as a server holding INGEST_TOKEN
       description: |
         Browsers must send a matching `Origin`. Callers without `Origin` are treated as server-side and must
-        present a platform identity or `Authorization: Bearer <INGEST_TOKEN>`.
+        present a platform identity or `Authorization: Bearer <INGEST_TOKEN>`. Under Cloudflare Access only the
+        owner may import from the page (same-origin required; 403 `not_owner` for other signed-in emails).
       security:
         - {}
         - ingestToken: []

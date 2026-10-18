@@ -30,10 +30,17 @@ export function tagsFor(text: string): string[] {
 }
 
 const SECTION_HEADING = /^[①②③④⑤⑥]|^如果我今天只有|^只有\s*10\s*分钟/;
-/** 旧格式的条目标题没有编号，靠「下一行以 作者： 或 多源讨论 开头」识别。 */
+/** 不编号的条目标题，靠「下一行以 作者： 或 多源讨论 开头」识别。 */
 const NOT_A_TITLE = /^[-*#（]|^按技术|^作者|^原始|^相关|^热度/;
-const NUMBERED_TITLE = /^\d+\.\s+\*\*/;
+/** 编号标题：`1. **标题**`，或 `### 01. 标题` 这样带编号的三到六级标题。 */
+const NUMBERED_TITLE = /^\d+\.\s+\*\*|^#{3,6}\s+\d+[.、]\s*\S/;
 const LEGACY_TITLE_NEXT = /^(作者[：:]|多源讨论)/;
+/** 整行加粗（`**标题**`）：在「①」章节里就是一条动态的标题，不要求下一行是作者。 */
+const BOLD_TITLE = /^\*\*[^*].*\*\*$/;
+/** 三到六级标题（`### 标题`）：下一行是作者才算条目，否则是 `### AI` 这样的分组标题。 */
+const HEADING_TITLE = /^#{3,6}\s+\S/;
+/** 条目标题前的编号与「标题：」前缀。 */
+const TITLE_PREFIX = /^\d+[.、]\s*/;
 
 export function isSectionHeading(plainLine: string): boolean {
   return SECTION_HEADING.test(plainLine);
@@ -42,7 +49,15 @@ export function isNumberedTitle(line: string): boolean {
   return NUMBERED_TITLE.test(line);
 }
 export function isLegacyTitle(line: string, nextNonEmptyLine: string): boolean {
-  return Boolean(line) && !NOT_A_TITLE.test(line) && LEGACY_TITLE_NEXT.test(nextNonEmptyLine);
+  if (!line) return false;
+  if (BOLD_TITLE.test(line)) {
+    const text = plain(line);
+    return !isSectionHeading(text) && !NOT_A_TITLE.test(text);
+  }
+  // 下一行可以是 `作者：`、`**作者**：` 或 `- 作者：`。
+  if (!LEGACY_TITLE_NEXT.test(plain(nextNonEmptyLine).replace(/^[-*]\s+/, ''))) return false;
+  if (HEADING_TITLE.test(line)) return !isSectionHeading(plain(line));
+  return !NOT_A_TITLE.test(line);
 }
 
 export function sectionsFor(raw: string): Section[] {
@@ -75,7 +90,7 @@ export function storiesFor(report: Pick<Report, 'id' | 'raw' | 'date' | 'topic'>
 
   return starts.map((index, i) => {
     const block = body.slice(index, starts[i + 1] ?? body.length).join('\n').trim();
-    const title = plain(body[index]).replace(/^\d+\.\s*/, '').replace(/^标题[：:]\s*/, '');
+    const title = plain(body[index]).replace(TITLE_PREFIX, '').replace(/^标题[：:]\s*/, '');
     const clean = plain(block);
     const summaryLine = block.split('\n').map(plain).find((l) => /^发生了什么[：:]/.test(l));
     const summary = summaryLine?.replace(/^发生了什么[：:]\s*/, '') ?? clean.slice(title.length).trim();
@@ -101,7 +116,7 @@ export function countLinks(raw: string): number {
  * 解析规则版本。改动 storiesFor / tagsFor / countLinks 的输出时加一，
  * 服务端会据此重建已存储的动态与统计。
  */
-export const DIGEST_VERSION = 1;
+export const DIGEST_VERSION = 2;
 
 type DigestSource = Pick<Report, 'id' | 'raw' | 'date' | 'topic'>;
 

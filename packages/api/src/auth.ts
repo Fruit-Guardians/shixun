@@ -105,6 +105,8 @@ export function usesAccess(env: ApiEnv): boolean {
 export const ACCESS_COOKIE = 'CF_Authorization';
 /** 所有者登录入口：只有这个路径（和 /api/sync）在 Access 应用范围内，其余页面与读取接口公开。 */
 export const ACCESS_LOGIN_PATH = '/login';
+/** Access 自带的退出地址：清除本站域名下的 `CF_Authorization` cookie。 */
+export const ACCESS_LOGOUT_PATH = '/cdn-cgi/access/logout';
 
 function readCookie(request: Request, name: string): string | null {
   for (const part of (request.headers.get('cookie') ?? '').split(';')) {

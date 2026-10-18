@@ -25,7 +25,8 @@ interface CommandPaletteProps {
   onSearch: (query: string) => void;
   onPalette: (palette: Palette) => void;
   onToggleTheme: () => void;
-  onImport: () => void;
+  /** 只有所有者才传：访客的命令面板里没有导入。 */
+  onImport?: () => void;
   onOpenSync: () => void;
   onRefresh: () => void;
 }
@@ -137,9 +138,11 @@ export default function CommandPalette(props: CommandPaletteProps) {
             </Command.Group>
 
             <Command.Group heading="actions">
-              <Item value="import .md" keywords={['导入', 'upload', 'markdown']} onSelect={run(props.onImport)} hint="导入日报">
-                import .md
-              </Item>
+              {props.onImport && (
+                <Item value="import .md" keywords={['导入', 'upload', 'markdown']} onSelect={run(props.onImport)} hint="导入日报">
+                  import .md
+                </Item>
+              )}
               <Item value="systemctl status sync" keywords={['同步', 'sync', 'google']} onSelect={run(props.onOpenSync)} hint="同步状态">
                 systemctl status sync
               </Item>

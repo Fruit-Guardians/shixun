@@ -169,6 +169,23 @@ export interface SetupCredentialResponse {
   token: string;
 }
 
+/**
+ * 当前访客的身份，只用于决定界面显示哪些按钮；真正的授权仍由每个写接口自己校验。
+ * 不包含服务令牌身份。
+ */
+export interface SessionResponse {
+  /** 是否带着有效的登录身份。 */
+  signedIn: boolean;
+  /** 是否站点所有者：可以导入、删除、恢复版本和查看同步失败明细。 */
+  owner: boolean;
+  /** 登录用户自己的邮箱；未登录为 null。 */
+  email: string | null;
+  /** 所有者登录入口（Cloudflare Access 部署为 `/login`）；平台自带登录时为 null。 */
+  loginPath: string | null;
+  /** 退出登录地址；未登录或平台自带登录时为 null。 */
+  logoutPath: string | null;
+}
+
 export interface HealthResponse {
   ok: true;
   database: boolean;

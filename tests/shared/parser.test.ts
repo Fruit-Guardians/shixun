@@ -13,6 +13,39 @@ test('all history editions parse exactly ten top-level events', () => {
   }
 });
 
+const grokReport = (section: string) => ({ id: 'g', date: '2026-10-18', topic: '全球技术社区' as const, raw: `# 2026-10-18 全球技术社区日报\n\n## ① 昨日重要动态\n\n${section}\n\n## ② 核心博主追踪\n\n**不是动态**\n作者：x\n` });
+
+test('Grok-style bold titles are stories; group headings and the top-3 list are not', () => {
+  const stories = storiesFor(
+    grokReport(`### 最值得看的 3 条
+1. Sakana AI 开源 Agentic Scientist v3
+2. Plex Media Server 未授权 RCE 链
+
+### AI
+**Sakana AI 发布 Agentic Scientist v3 并开源**  
+作者：Sakana AI Labs  
+发生了什么：开源 AI-Scientist-v3。  
+原始链接：https://x.com/a
+
+### 开源社区 / 软件工程
+**公司开始阻断 AI agent 访问**  
+讨论：Delta 阻断 agent 订票。`),
+  );
+  assert.deepEqual(
+    stories.map((s) => s.title),
+    ['Sakana AI 发布 Agentic Scientist v3 并开源', '公司开始阻断 AI agent 访问'],
+  );
+  assert.equal(stories[0].summary, '开源 AI-Scientist-v3。');
+  assert.ok(!stories[0].body.includes('公司开始阻断'), 'a story ends where the next one starts');
+});
+
+test('numbered headings and headings followed by an author line are stories', () => {
+  const numbered = storiesFor(grokReport('### 01. 第一条\n发生了什么：一。\n\n### 02、第二条\n发生了什么：二。'));
+  assert.deepEqual(numbered.map((s) => [s.title, s.summary]), [['第一条', '一。'], ['第二条', '二。']]);
+  const authored = storiesFor(grokReport('### AI\n\n### 某个标题\n- **作者**：某人\n发生了什么：三。'));
+  assert.deepEqual(authored.map((s) => s.title), ['某个标题']);
+});
+
 test('security classification is evidence-based and multi-label', () => {
   assert.ok(tagsFor('Binder UAF Android内核漏洞').includes('二进制安全'));
   assert.ok(tagsFor('OAuth Deep Link会话劫持').includes('Web 安全'));

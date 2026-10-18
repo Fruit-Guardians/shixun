@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accessLoginRedirect, createAccessVerifier } from '#api';
+import { SECURITY_HEADERS, accessLoginRedirect, createAccessVerifier, withSecurityHeaders } from '#api';
 import type { ApiEnv } from '#api';
 import { apiPaths } from '#shared';
-import type { IngestResult } from '#shared';
+import type { IngestResult, ReportsResponse, SessionResponse } from '#shared';
 import { ORIGIN, PROGRAM_HEADERS, USER_HEADERS, createHarness, sampleRaw } from './helpers/harness.ts';
 
 /** Cloudflare Access 模式：站点公开可读；写操作只认签名 JWT（请求头或 cookie），明文身份头与协议头都不能单独放行。 */
@@ -188,4 +188,53 @@ test('the setup credential points owners at Access service tokens', async () => 
   assert.equal(data.code, 'access_service_token');
   assert.match(data.error, /CF_ACCESS_CLIENT_ID/);
   assert.ok(!JSON.stringify(data).includes('secret"'));
+});
+
+test('the session says who is visiting, and nothing more than that', async () => {
+  const h = harness();
+  const session = async (headers: HeadersInit = {}) => {
+    const res = await h.call(apiPaths.session, { headers });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('cache-control'), 'private, no-store');
+    return (await res.json()) as SessionResponse;
+  };
+  assert.deepEqual(await session(), { signedIn: false, owner: false, email: null, loginPath: '/login', logoutPath: null });
+  assert.deepEqual(await session(await withCookie(userToken())), {
+    signedIn: true,
+    owner: true,
+    email: 'owner@example.com',
+    loginPath: '/login',
+    logoutPath: '/cdn-cgi/access/logout',
+  });
+  assert.equal((await session(await withCookie(userToken('guest@example.com')))).owner, false);
+  // 伪造的身份头、服务令牌都不算登录。
+  assert.equal((await session(USER_HEADERS)).signedIn, false);
+  assert.equal((await session({ 'cf-access-jwt-assertion': await serviceToken() })).signedIn, false);
+});
+
+test('sync failure details reach the owner only', async () => {
+  const h = harness();
+  const service = { 'cf-access-jwt-assertion': await serviceToken() };
+  const failures = [{ fileId: '13nwQIpjUwe4EoX5jS3PiRMgkwdbgP9ON', name: '2026-10-18_全球技术社区.md', reason: '文件名与正文内容日期不一致。' }];
+  const run = { triggerInstalled: true, failed: 1, failures };
+  assert.equal((await h.call(apiPaths.syncStatus, { method: 'POST', json: run, headers: { ...PROGRAM_HEADERS, ...service } })).status, 200);
+
+  const list = async (headers: HeadersInit = {}) => ((await (await h.call(apiPaths.reports, { headers })).json()) as ReportsResponse).sync;
+  const visitor = await list();
+  assert.equal(visitor.failed, 1);
+  assert.deepEqual(visitor.failures, []);
+  assert.deepEqual((await list(await withCookie(userToken('guest@example.com')))).failures, []);
+  assert.deepEqual((await list(await withCookie(userToken()))).failures, failures);
+});
+
+test('every response gets the security headers without losing its own', async () => {
+  const original = new Response('x', { status: 404, headers: { 'Content-Type': 'text/plain', 'X-Frame-Options': 'SAMEORIGIN' } });
+  const secured = withSecurityHeaders(original);
+  assert.equal(secured.status, 404);
+  assert.equal(secured.headers.get('content-type'), 'text/plain');
+  assert.equal(secured.headers.get('x-frame-options'), 'SAMEORIGIN');
+  for (const name of Object.keys(SECURITY_HEADERS).filter((n) => n !== 'X-Frame-Options')) assert.ok(secured.headers.get(name), name);
+  const csp = secured.headers.get('content-security-policy') ?? '';
+  for (const directive of ["frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "connect-src 'self'"]) assert.ok(csp.includes(directive), directive);
+  assert.equal(await secured.text(), 'x');
 });

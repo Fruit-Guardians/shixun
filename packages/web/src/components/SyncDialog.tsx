@@ -1,7 +1,7 @@
-import { ArrowUpRight, Check, Cloud, Copy, Download, ExternalLink, Folder, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, Check, Cloud, Copy, Download, ExternalLink, Folder, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { DRIVE_FOLDER_ID } from '#shared';
-import type { SyncState } from '#shared';
+import type { SessionResponse, SyncState } from '#shared';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { errorMessage } from '../api/client.ts';
 import type { ApiClient } from '../api/client.ts';
@@ -13,18 +13,21 @@ interface SyncDialogProps {
   onOpenChange: (open: boolean) => void;
   api: ApiClient;
   sync: SyncState | null;
+  /** 访客只看同步状态；安装步骤、凭证和失败明细只给所有者。 */
+  session: SessionResponse;
   onRefresh: () => void;
 }
 
-export default function SyncDialog({ open, onOpenChange, api, sync, onRefresh }: SyncDialogProps) {
+export default function SyncDialog({ open, onOpenChange, ...rest }: SyncDialogProps) {
   return (
     <ModalFrame open={open} onOpenChange={onOpenChange} title="sync --setup">
-      <SyncPanel api={api} sync={sync} onRefresh={onRefresh} />
+      <SyncPanel {...rest} />
     </ModalFrame>
   );
 }
 
-function SyncPanel({ api, sync, onRefresh }: Omit<SyncDialogProps, 'open' | 'onOpenChange'>) {
+function SyncPanel({ api, sync, session, onRefresh }: Omit<SyncDialogProps, 'open' | 'onOpenChange'>) {
+  const owner = session.owner;
   const [copying, setCopying] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -64,9 +67,11 @@ function SyncPanel({ api, sync, onRefresh }: Omit<SyncDialogProps, 'open' | 'onO
         <p>
           {sync?.lastCheckedAt
             ? `最近回执：${new Date(sync.lastCheckedAt).toLocaleString('zh-CN')} · 新增 ${sync.created} / 更新 ${sync.updated} / 未变 ${sync.unchanged} / 失败 ${sync.failed}`
-            : '接收端已就绪；尚未收到 Google 脚本的真实运行回执。完成下面的一次性设置后，才会显示运行中。'}
+            : owner
+              ? '接收端已就绪；尚未收到 Google 脚本的真实运行回执。完成下面的一次性设置后，才会显示运行中。'
+              : '尚未收到 Google 脚本的真实运行回执。'}
         </p>
-        {sync && sync.failures.length > 0 && (
+        {owner && sync && sync.failures.length > 0 && (
           <ul className="sync-failures" aria-label="最近一轮失败的文件">
             {sync.failures.map((f) => (
               <li key={f.fileId}>
@@ -84,71 +89,102 @@ function SyncPanel({ api, sync, onRefresh }: Omit<SyncDialogProps, 'open' | 'onO
           刷新状态
         </button>
       </div>
-      <div className="setup-heading">
-        <h3>一次设置，以后只管阅读。</h3>
-        <span>每 15 分钟检查更新</span>
-      </div>
-      <ol className="setup-steps">
-        <li>
-          <span>01</span>
-          <div>
-            <strong>创建 Google 脚本</strong>
-            <p>下载同步器，新建 Apps Script 项目。将 Code.gs 与 appsscript.json 分别粘贴到对应文件。</p>
-            <div className="setup-actions">
-              <a className="outline-button" href="/downloads/shixun-drive-sync.zip" download>
-                <Download size={15} />
-                下载同步器
-              </a>
-              <a className="text-button" href="https://script.google.com/home/start" target="_blank" rel="noopener noreferrer">
-                打开 Apps Script
-                <ExternalLink size={14} />
-              </a>
-            </div>
+      {owner ? (
+        <>
+          <div className="setup-heading">
+            <h3>一次设置，以后只管阅读。</h3>
+            <span>每 15 分钟检查更新</span>
           </div>
-        </li>
-        <li>
-          <span>02</span>
-          <div>
-            <strong>设置私密连接凭证</strong>
-            <p>
-              项目设置 → 脚本属性 → 添加 <code>SITE_SERVICE_TOKEN</code>，将复制的凭证作为值保存。部署在 Cloudflare Access 后面时，改为保存服务令牌的{' '}
-              <code>CF_ACCESS_CLIENT_ID</code>、<code>CF_ACCESS_CLIENT_SECRET</code> 和站点地址 <code>SITE_URL</code>。凭证提供站点访问权限，请仅存入你自己的脚本属性。
+          <ol className="setup-steps">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>创建 Google 脚本</strong>
+                <p>下载同步器，新建 Apps Script 项目。将 Code.gs 与 appsscript.json 分别粘贴到对应文件。</p>
+                <div className="setup-actions">
+                  <a className="outline-button" href="/downloads/shixun-drive-sync.zip" download>
+                    <Download size={15} />
+                    下载同步器
+                  </a>
+                  <a className="text-button" href="https://script.google.com/home/start" target="_blank" rel="noopener noreferrer">
+                    打开 Apps Script
+                    <ExternalLink size={14} />
+                  </a>
+                </div>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>设置私密连接凭证</strong>
+                <p>
+                  项目设置 → 脚本属性 → 添加 <code>SITE_SERVICE_TOKEN</code>，将复制的凭证作为值保存。部署在 Cloudflare Access 后面时，改为保存服务令牌的{' '}
+                  <code>CF_ACCESS_CLIENT_ID</code>、<code>CF_ACCESS_CLIENT_SECRET</code> 和站点地址 <code>SITE_URL</code>。凭证提供站点访问权限，请仅存入你自己的脚本属性。
+                </p>
+                <button className="outline-button" disabled={copying} onClick={copyCredential}>
+                  <Copy size={15} />
+                  {copying ? '正在复制…' : '复制站点连接凭证'}
+                </button>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>运行 installSync，完成 Google 授权</strong>
+                <p>选择 installSync 后点击运行。脚本先同步并逐字回读，再安装一个定时触发器。返回这里刷新，确认真实回执。</p>
+                <a className="text-button" href="/sync-instructions.md" target="_blank">
+                  查看完整安装与停用说明
+                  <ArrowUpRight size={14} />
+                </a>
+              </div>
+            </li>
+          </ol>
+          {message && (
+            <p className="setup-message" role="status">
+              {message}
             </p>
-            <button className="outline-button" disabled={copying} onClick={copyCredential}>
-              <Copy size={15} />
-              {copying ? '正在复制…' : '复制站点连接凭证'}
-            </button>
-          </div>
-        </li>
-        <li>
-          <span>03</span>
-          <div>
-            <strong>运行 installSync，完成 Google 授权</strong>
-            <p>选择 installSync 后点击运行。脚本先同步并逐字回读，再安装一个定时触发器。返回这里刷新，确认真实回执。</p>
-            <a className="text-button" href="/sync-instructions.md" target="_blank">
-              查看完整安装与停用说明
-              <ArrowUpRight size={14} />
-            </a>
-          </div>
-        </li>
-      </ol>
-      {message && (
-        <p className="setup-message" role="status">
-          {message}
+          )}
+          <a className="folder-link" href={`https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`} target="_blank" rel="noopener noreferrer">
+            <Folder size={19} />
+            <span>
+              <strong>日报源文件夹</strong>
+              <small>仅读取 Markdown · 去重 · 全文回读校验</small>
+            </span>
+            <ExternalLink size={16} />
+          </a>
+          <p className="setup-footnote">
+            <Check size={14} />
+            旧 AI 写入协议已停用；无需再建 Codex 定时任务。
+          </p>
+        </>
+      ) : (
+        <p className="setup-footnote">
+          <Check size={14} />
+          日报由站点所有者的 Google 脚本自动同步；这里只显示运行状态。
         </p>
       )}
-      <a className="folder-link" href={`https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`} target="_blank" rel="noopener noreferrer">
-        <Folder size={19} />
-        <span>
-          <strong>日报源文件夹</strong>
-          <small>仅读取 Markdown · 去重 · 全文回读校验</small>
-        </span>
-        <ExternalLink size={16} />
-      </a>
-      <p className="setup-footnote">
-        <Check size={14} />
-        旧 AI 写入协议已停用；无需再建 Codex 定时任务。
-      </p>
+      <AccountLinks session={session} />
     </>
   );
+}
+
+/** 所有者登录 / 退出入口；平台自带登录（loginPath 为 null）时不显示。 */
+function AccountLinks({ session }: { session: SessionResponse }) {
+  if (session.signedIn && session.logoutPath) {
+    return (
+      <a className="text-button account-link" href={session.logoutPath}>
+        <LogOut size={14} />
+        退出登录{session.email ? `（${session.email}）` : ''}
+      </a>
+    );
+  }
+  if (!session.signedIn && session.loginPath) {
+    return (
+      <a className="text-button account-link" href={session.loginPath}>
+        <LogIn size={14} />
+        所有者登录
+      </a>
+    );
+  }
+  return null;
 }

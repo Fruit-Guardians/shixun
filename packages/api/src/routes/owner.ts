@@ -7,6 +7,12 @@ import type { RequestContext } from '../router.ts';
  * 只允许站点所有者在本站页面里发起的操作：必须同源（防 CSRF）、已登录，
  * 配置了 OWNER_EMAILS 时还要在名单内（Access 模式下必须配置）。`denied` 是不在名单内时的提示。
  */
+/** 当前调用方是否所有者（不抛错、不检查来源），用于决定返回内容的详略。 */
+export async function isCallerOwner({ env, caller }: RequestContext): Promise<boolean> {
+  const { user, access } = await caller();
+  return user !== null && isOwner(user, env.OWNER_EMAILS, access);
+}
+
 export async function requireOwner({ request, env, caller }: RequestContext, denied: string): Promise<PlatformUser> {
   if (!isSameOrigin(request, { allowMissing: false })) throw new HttpError(403, '请求来源不匹配。');
   const { user, access } = await caller();

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.4.0
+  version: 3.5.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -17,7 +17,8 @@ info:
       carries the email; a service-token JWT (no email, header only) is the only way to call `/api/sync*`, still
       with `X-Sites-Report-Sync`. Plain identity headers are ignored. Imports and owner actions require a
       same-origin browser request from an email in `OWNER_EMAILS`; signed-out writes get 401 with a hint to
-      visit `/login`.
+      visit `/login`. In this mode the Worker also adds site-wide security headers (CSP, HSTS, `X-Frame-Options`,
+      `Referrer-Policy`, `Permissions-Policy`) to every response.
 paths:
   /api/health:
     get:
@@ -142,6 +143,19 @@ paths:
         '403': {description: 'Origin mismatch, or not an owner (code: not_owner)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '404': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /api/session:
+    get:
+      summary: Who is visiting (UI hint only)
+      description: |
+        Added in 3.5.0. Tells the web client whether to show owner controls (import, restore, delete, sync setup).
+        It is a display hint, not an authorization: every write endpoint still checks identity itself.
+        Service-token JWTs and plain identity headers (in Access mode) never count as signed in.
+      responses:
+        '200':
+          description: The visitor's identity
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
   /api/search:
     get:
       summary: Search every story's title and body
@@ -270,6 +284,15 @@ components:
       properties:
         ok: {type: boolean, const: true}
         database: {type: boolean}
+    Session:
+      type: object
+      required: [signedIn, owner, email, loginPath, logoutPath]
+      properties:
+        signedIn: {type: boolean}
+        owner: {type: boolean, description: May import, delete, restore versions and see sync failure details}
+        email: {type: [string, 'null'], description: The signed-in visitor's own email}
+        loginPath: {type: [string, 'null'], description: '`/login` in Access mode; null when the platform handles sign-in'}
+        logoutPath: {type: [string, 'null'], description: Access logout URL when signed in; otherwise null}
     Topic:
       type: string
       enum: [全球技术社区, 安全专题]
@@ -386,7 +409,7 @@ components:
         updated: {type: integer}
         unchanged: {type: integer}
         failed: {type: integer}
-        failures: {type: array, items: {$ref: '#/components/schemas/SyncFailure'}, description: Failed files from the latest receipt; empty for older scripts}
+        failures: {type: array, items: {$ref: '#/components/schemas/SyncFailure'}, description: 'Failed files from the latest receipt; empty for older scripts. Since 3.5.0, in Access mode only the owner sees them (visitors get an empty list; `failed` still counts them).'}
         legacyWriterDisabled: {type: boolean, const: true}
     ReportsResponse:
       type: object

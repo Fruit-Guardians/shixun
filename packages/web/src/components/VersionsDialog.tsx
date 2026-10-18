@@ -12,6 +12,8 @@ interface VersionsDialogProps {
   onOpenChange: (open: boolean) => void;
   api: ApiClient;
   report: ReportSummary;
+  /** 所有者才能恢复和删除；访客只能查看与下载。 */
+  canManage: boolean;
   /** 恢复成功后由上层刷新归档并提示。 */
   onRestored: (result: IngestResult) => Promise<void>;
   /** 删除成功后由上层离开阅读页并刷新归档。 */
@@ -34,7 +36,7 @@ type Pending = { kind: 'restore'; versionId: string } | { kind: 'delete' } | nul
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('zh-CN', { hour12: false }) : '随站点发布');
 const shortHash = (hash: string) => hash.slice(0, 8);
 
-function VersionsPanel({ api, report, onRestored, onDeleted }: Omit<VersionsDialogProps, 'open' | 'onOpenChange'>) {
+function VersionsPanel({ api, report, canManage, onRestored, onDeleted }: Omit<VersionsDialogProps, 'open' | 'onOpenChange'>) {
   const [attempt, setAttempt] = useState(0);
   // 结果按 key 记录：归档刷新后 revision 变化或点了重试，key 随之变化，旧结果自然作废。
   const key = `${report.id}@${report.revision ?? ''}@${attempt}`;
@@ -82,10 +84,12 @@ function VersionsPanel({ api, report, onRestored, onDeleted }: Omit<VersionsDial
       <span className="modal-icon">
         <History size={27} />
       </span>
-      <span className="eyebrow">VERSIONS · OWNER ONLY</span>
+      <span className="eyebrow">{canManage ? 'VERSIONS · OWNER' : 'VERSIONS · READ ONLY'}</span>
       <DialogTitle>版本历史</DialogTitle>
       <DialogDescription className="modal-subtitle">
-        每次内容变化都会保留被替换的原文。恢复会把所选版本写成新的一版，当前内容同样留在历史里。
+        {canManage
+          ? '每次内容变化都会保留被替换的原文。恢复会把所选版本写成新的一版，当前内容同样留在历史里。'
+          : '每次内容变化都会保留被替换的原文，可以下载任意一版对照阅读。'}
       </DialogDescription>
 
       {load.status === 'loading' && (
@@ -119,7 +123,7 @@ function VersionsPanel({ api, report, onRestored, onDeleted }: Omit<VersionsDial
                   <Download size={14} />
                   下载
                 </a>
-                {pending?.kind === 'restore' && pending.versionId === version.id ? (
+                {!canManage ? null : pending?.kind === 'restore' && pending.versionId === version.id ? (
                   <>
                     <button className="text-button danger" disabled={busy} onClick={() => restore(version.id)}>
                       {busy ? '正在恢复…' : '确认恢复'}
@@ -147,7 +151,7 @@ function VersionsPanel({ api, report, onRestored, onDeleted }: Omit<VersionsDial
       )}
 
       {/* 种子随站点发布，不能删除；读到版本信息之前也不显示删除。 */}
-      {load.status === 'ready' && load.data.stored && (
+      {canManage && load.status === 'ready' && load.data.stored && (
         <div className="danger-zone">
           <div>
             <strong>删除这一期</strong>

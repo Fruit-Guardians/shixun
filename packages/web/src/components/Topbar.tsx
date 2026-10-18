@@ -13,7 +13,8 @@ interface TopbarProps {
   onNavigate: (view: View) => void;
   onToggleTheme: () => void;
   onToggleMobileNav: () => void;
-  onImport: () => void;
+  /** 只有所有者才传：访客看不到导入按钮。 */
+  onImport?: () => void;
   /** 打开 ⌘K 命令面板。 */
   onCommand?: () => void;
 }
@@ -58,10 +59,12 @@ export default function Topbar({ view, reading, savedCount, theme, palette, onPa
           <button className="btn btn-ghost btn-icon" aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'} onClick={onToggleTheme}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          <button className="btn btn-primary btn-label-wrap" aria-label="导入 Markdown" onClick={onImport}>
-            <Plus size={16} />
-            <span className="btn-label">import .md</span>
-          </button>
+          {onImport && (
+            <button className="btn btn-primary btn-label-wrap" aria-label="导入 Markdown" onClick={onImport}>
+              <Plus size={16} />
+              <span className="btn-label">import .md</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -29,13 +29,15 @@ shared ◀── api        api 不得引用 #web / React / Next / cloudflare:wo
 
 ## 后端分层
 ```
-routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, search.ts, sync.ts, credential.ts, health.ts）
+routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, search.ts, sync.ts, credential.ts, health.ts, session.ts）
                service-errors.ts：ValidationError→400、回读不一致→503、其它→记录日志 + 503
 services/      业务：导入去重、版本历史、归档合并与排序、同步状态   （不知道 HTTP）
 repositories/  SQL：只有这一层写 SQL；列名显式列出   （不知道业务规则）
 schema.ts      drizzle 表与索引定义，仅用于 `npm run db:generate` 生成 drizzle/ 迁移
 http.ts        HttpError、统一错误响应；所有响应默认带 no-store + nosniff
 auth.ts        平台登录头、所有者名单、程序同步协议、同源检查、常量时间比较
+access.ts      Cloudflare Access JWT 验签（RS256、JWKS 缓存）
+security.ts    整站安全头（CSP、HSTS 等），由 Worker 入口统一加上
 router.ts      极小路由器：路径参数、404、405 + Allow
 ```
 运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`、`AUTH_PROVIDER`、`CF_ACCESS_TEAM_DOMAIN`、`CF_ACCESS_AUD`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
@@ -66,6 +68,9 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 - Worker 入口（`app/_host/cloudflare-worker.ts`）只处理 `/login`：Access 登录完成后 302 回首页。
 - 用户 JWT 带邮箱，即登录用户；服务令牌 JWT 没有邮箱、只认请求头，只能用于 `/api/sync*`（仍需协议头、不能来自浏览器），不能当用户导入或做所有者操作。
 - 导入和所有者操作都要求同源、且邮箱在 `OWNER_EMAILS` 内（必须配置）；团队域名或 AUD 缺失时一律拒绝。
+- `GET /api/session` 告诉前端访客是不是所有者，前端据此隐藏导入、恢复、删除和同步设置。它只是显示提示：按钮藏起来不是防线，每个写接口仍然自己校验。
+- 同步失败明细（Drive 文件 ID、文件名、原因）只返回给所有者，访客只看到失败计数。首屏归档在服务端读取、不带登录身份，所以前端确认是所有者后会重新读一次。
+- Worker 入口给所有响应加安全头（`security.ts`）：CSP（只允许本站脚本与连接、Google Fonts 样式与字体，禁止插件、`<base>` 改写和被嵌入）、HSTS、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`、`Cross-Origin-Opener-Policy`。主题初始化脚本和 RSC 水合数据是内联的，所以 CSP 保留 `'unsafe-inline'`。
 
 **Sites（未设置 `AUTH_PROVIDER`）**：身份全部来自 Sites 入口，API 不再二次校验。这种模式只能部署在 Sites 后面，否则身份头可以伪造：
 - `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。
@@ -82,7 +87,7 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 api/client.ts      唯一的 HTTP 出口；ApiError；可注入 fetcher 与 baseUrl
 state/             纯 reducer：浏览状态（视图/筛选/搜索/期数）、归档加载状态
 lib/               纯函数：markdown 解析、选择器（过滤/统计/高亮）、格式化、本机存储
-hooks/             把外部状态接进 React：路由（hash）、主题、收藏、滚动、提示、全文搜索（useSearch）、原文按需加载（useReportText，按 id+revision+importedAt 缓存）
+hooks/             把外部状态接进 React：路由（hash）、主题、收藏、滚动、提示、全文搜索（useSearch）、原文按需加载（useReportText，按 id+revision+importedAt 缓存）、访客身份（useSession，读取前按访客处理）
 components/        只负责展示；业务状态都从 props 来
 App.tsx            组合以上各层
 ```

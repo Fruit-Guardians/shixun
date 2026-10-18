@@ -116,3 +116,16 @@ test('malformed version payloads are rejected', async () => {
   const api = createApiClient({ fetcher: reply({ versions: 'nope' }) });
   await assert.rejects(api.listVersions('x'), (e: ApiError) => e.code === 'bad_response');
 });
+
+test('getSession reads the visitor identity and rejects malformed payloads', async () => {
+  const owner = { signedIn: true, owner: true, email: 'o@example.com', loginPath: '/login', logoutPath: '/cdn-cgi/access/logout' };
+  assert.deepEqual(await createApiClient({ fetcher: reply(owner) }).getSession(), owner);
+  assert.deepEqual(await createApiClient({ fetcher: reply({ owner: false }) }).getSession(), {
+    signedIn: false,
+    owner: false,
+    email: null,
+    loginPath: null,
+    logoutPath: null,
+  });
+  await assert.rejects(createApiClient({ fetcher: reply({ owner: 'yes' }) }).getSession(), (e: ApiError) => e.code === 'bad_response');
+});

@@ -7,6 +7,7 @@ import type {
   ReportVersionsResponse,
   ReportsResponse,
   SearchResponse,
+  SessionResponse,
   SetupCredentialResponse,
 } from '#shared';
 
@@ -75,6 +76,12 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
       const data = await request<Partial<SearchResponse>>(`${apiPaths.search}?${new URLSearchParams({ q: query })}`, { signal });
       if (!data || !Array.isArray(data.storyIds)) throw new ApiError('搜索返回格式异常。', 200, 'bad_response');
       return data as SearchResponse;
+    },
+    /** 当前访客是否登录、是否所有者；只决定界面显示哪些按钮。 */
+    async getSession(signal?: AbortSignal): Promise<SessionResponse> {
+      const data = await request<Partial<SessionResponse> | null>(apiPaths.session, { signal });
+      if (!data || typeof data.owner !== 'boolean') throw new ApiError('身份返回格式异常。', 200, 'bad_response');
+      return { signedIn: Boolean(data.signedIn), owner: data.owner, email: data.email ?? null, loginPath: data.loginPath ?? null, logoutPath: data.logoutPath ?? null };
     },
     async importReport(input: ImportRequest): Promise<IngestResult> {
       return (await postJson(apiPaths.reports, input)) as IngestResult;

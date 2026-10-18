@@ -50,6 +50,7 @@ export const apiPaths = {
   restoreVersion: (id: string, versionId: string) =>
     `/api/reports/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
   search: '/api/search',
+  session: '/api/session',
   sync: '/api/sync',
   syncStatus: '/api/sync/status',
   setupCredential: '/api/integration/setup-credential',

@@ -98,6 +98,8 @@ Worker 名称必须和配置里的 `name`（`shixun`）一致。之后每次推�
 
 ## 安全要点
 
+- 访客看不到导入、恢复、删除和同步设置，也看不到同步失败明细。所有者访问 `/login` 登录后才会出现，「数据与同步」里有退出登录入口。
+- 所有响应都带 CSP、HSTS、`X-Frame-Options: DENY` 等安全头（`packages/api/src/security.ts`）。以后如果引入新的外部脚本、字体或接口地址，要同步放行。
 - `preview_urls` 已关闭：预览地址不在 Access 应用范围内，同步接口在那里拿不到服务令牌 JWT。
 - 如果以后绑定自定义域名，要把这个域名的 `/login` 和 `/api/sync` 也加入 Access 应用，否则在新域名上无法登录和同步（阅读不受影响）。
 - `AUTH_PROVIDER=cloudflare-access` 时，`oai-authenticated-user-*` 等明文身份头一律忽略。不要在 Cloudflare 上去掉这个变量：

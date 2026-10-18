@@ -1,15 +1,24 @@
 import { MAX_BODY_BYTES } from '#shared';
-import { hasBearerToken, isSameOrigin, loginHint } from '../auth.ts';
+import { hasBearerToken, isSameOrigin, loginHint, usesAccess } from '../auth.ts';
 import { requireDb } from '../database.ts';
 import { HttpError, SAFE_HEADERS, json, readJsonBody } from '../http.ts';
 import type { Handler } from '../router.ts';
 import { getArchive, ingestReport, readReport } from '../services/reports.ts';
-import { requireOwner } from './owner.ts';
+import { isCallerOwner, requireOwner } from './owner.ts';
 import { mapServiceErrors } from './service-errors.ts';
 
-/** GET /api/reports — 日报列表、导入状态与真实同步回执。 */
-export const listReportsRoute: Handler = async ({ env, seeds, now }) =>
-  json(await mapServiceErrors('reports.list', '归档暂时读取失败，请稍后刷新。', () => getArchive(requireDb(env), seeds, now)));
+/**
+ * GET /api/reports — 日报列表、导入状态与真实同步回执。
+ * Cloudflare Access 部署下站点公开：失败文件明细（Drive 文件 ID、文件名、错误原因）只给所有者，访客只看到计数。
+ */
+export const listReportsRoute: Handler = async (context) => {
+  const { env, seeds, now } = context;
+  const archive = await mapServiceErrors('reports.list', '归档暂时读取失败，请稍后刷新。', () => getArchive(requireDb(env), seeds, now));
+  if (usesAccess(env) && archive.sync.failures.length > 0 && !(await isCallerOwner(context))) {
+    return json({ ...archive, sync: { ...archive.sync, failures: [] } });
+  }
+  return json(archive);
+};
 
 /**
  * POST /api/reports — 手动导入：持服务凭证的程序，或登录用户。

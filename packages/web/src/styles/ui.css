@@ -412,6 +412,7 @@ mark{background:var(--warn);color:#111;padding:0 1px}
 .folder-link small{font-size:11px;color:var(--ink-3)}
 .folder-link>svg:last-child{margin-left:auto}
 .setup-footnote{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:11px;color:var(--ink-3)}
+.account-link{align-self:flex-start;margin-top:14px}
 .primary-button{display:flex;align-items:center;justify-content:center;gap:10px;height:44px;padding:0 16px;background:var(--accent);color:var(--accent-ink);border:2px solid var(--ink);box-shadow:var(--hard-sm);font-size:14px;font-weight:800;transition:transform .08s,box-shadow .08s}
 :root[data-theme=dark] .primary-button{border-color:var(--accent);box-shadow:var(--glow)}
 .primary-button:active:not(:disabled){transform:translate(2px,2px);box-shadow:none}

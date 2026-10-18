@@ -9,6 +9,7 @@ import { setupCredentialRoute } from './routes/credential.ts';
 import { healthRoute } from './routes/health.ts';
 import { downloadReportRoute, importReportRoute, listReportsRoute } from './routes/reports.ts';
 import { searchRoute } from './routes/search.ts';
+import { sessionRoute } from './routes/session.ts';
 import { deleteReportRoute, downloadVersionRoute, listVersionsRoute, restoreVersionRoute } from './routes/versions.ts';
 import { ingestSyncRoute, readSyncStatusRoute, recordSyncStatusRoute } from './routes/sync.ts';
 
@@ -23,6 +24,7 @@ export function buildRouter(): Router {
     .get('/api/reports/:id/versions/:versionId', downloadVersionRoute)
     .post('/api/reports/:id/versions/:versionId/restore', restoreVersionRoute)
     .get(apiPaths.search, searchRoute)
+    .get(apiPaths.session, sessionRoute)
     .post(apiPaths.sync, ingestSyncRoute)
     .get(apiPaths.syncStatus, readSyncStatusRoute)
     .post(apiPaths.syncStatus, recordSyncStatusRoute)

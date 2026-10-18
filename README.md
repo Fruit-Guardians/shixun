@@ -14,7 +14,7 @@ Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原�
 [![React 19](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](packages/web)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522.13-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.4.0-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)](openapi.yaml)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.5.0-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)](openapi.yaml)
 
 [在线阅读](https://shixun.bx33661.workers.dev) · [部署](DEPLOY.md) · [架构](ARCHITECTURE.md) · [日报格式](REPORT_FORMAT.md) · [自动同步](integrations/google-apps-script/README.md) · [接口](openapi.yaml)
 
@@ -38,7 +38,10 @@ Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原�
   - 稍后阅读（保存在本机）
   - 下载原文和历史版本
 - **零 AI 同步**：同步只是一个普通的 Google Apps Script，不调用任何模型，也不需要电脑开机。
-- **公开阅读，写入受保护**：任何人都能浏览。导入、删除和恢复版本只对所有者开放，由 Cloudflare Access JWT 校验。
+- **公开阅读，写入受保护**：
+  - 任何人都能浏览。导入、删除和恢复版本只对所有者开放，由 Cloudflare Access JWT 校验。
+  - 访客看不到写操作按钮，也看不到同步失败明细。
+  - 整站带 CSP、HSTS、禁止嵌入等安全头。
 
 > [!NOTE]
 > 标签由确定性关键词规则生成。导入成功只能证明全文传输完整，不代表日报里第三方研究、数字和链接已经核实。
@@ -68,7 +71,7 @@ npm run check                         # 类型检查 + ESLint + 全部测试
 2. **接上 Google Drive**：按 [integrations/google-apps-script](integrations/google-apps-script/README.md) 安装 Apps Script，运行一次 `installSync`。
    - 之后每 15 分钟增量同步一次。
    - 站点「数据与同步」面板会显示每次真实回执。
-3. **让 Grok 按格式写**：文件名和一级标题里都要带同一个 `YYYY-MM-DD` 日期。动态条目用 `1. **标题**` 编号，详见 [REPORT_FORMAT.md](REPORT_FORMAT.md)。
+3. **让 Grok 按格式写**：文件名和一级标题里都要带同一个 `YYYY-MM-DD` 日期。动态条目写在「①」章节里，每条用一行加粗标题开头，详见 [REPORT_FORMAT.md](REPORT_FORMAT.md)。
 
 ## 项目结构
 
@@ -101,6 +104,7 @@ tests/          shared / api / web 的单元、接口与组件渲染测试
 | `GET` | `/api/reports/{id}/versions` | 版本历史 | 公开 |
 | `GET` | `/api/search?q=` | 跨日报全文搜索 | 公开 |
 | `GET` | `/api/health` | 健康检查 | 公开 |
+| `GET` | `/api/session` | 当前访客是否所有者（只决定显示哪些按钮） | 公开 |
 | `POST` | `/api/reports` | 手动导入 | 所有者 |
 | `DELETE` | `/api/reports/{id}` | 删除一期（原文留在历史里） | 所有者 |
 | `POST` | `/api/reports/{id}/versions/{versionId}/restore` | 恢复历史版本 | 所有者 |

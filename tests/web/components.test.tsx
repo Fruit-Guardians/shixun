@@ -7,6 +7,7 @@ import type { Report, StorySummary } from '#shared';
 import Markdown from '#web/components/Markdown.tsx';
 import ReaderView from '#web/components/ReaderView.tsx';
 import StoryCard from '#web/components/StoryCard.tsx';
+import Topbar from '#web/components/Topbar.tsx';
 import type { ReportText } from '#web/hooks/useReportText.ts';
 
 /** 组件渲染测试：服务端渲染成 HTML 再检查结构，不需要 DOM。交互由各自的纯函数与 reducer 测试覆盖。 */
@@ -86,4 +87,13 @@ test('story cards highlight the query and label their buttons for screen readers
   assert.match(html, /aria-pressed="true"/);
   assert.ok(html.includes(`aria-label="阅读：${story.title}"`));
   assert.match(html, /#01/);
+});
+
+test('visitors get no import button; the owner does', () => {
+  const topbar = (onImport?: () => void) =>
+    renderToStaticMarkup(
+      <Topbar view="today" reading={false} savedCount={0} theme="light" onNavigate={noop} onToggleTheme={noop} onToggleMobileNav={noop} onImport={onImport} />,
+    );
+  assert.ok(!topbar().includes('导入 Markdown'));
+  assert.ok(topbar(noop).includes('导入 Markdown'));
 });

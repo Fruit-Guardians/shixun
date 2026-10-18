@@ -20,6 +20,7 @@ import { useReportRoute } from './hooks/useReportRoute.ts';
 import { useReportText } from './hooks/useReportText.ts';
 import { useShowBackToTop } from './hooks/useScroll.ts';
 import { useSearch } from './hooks/useSearch.ts';
+import { useSession } from './hooks/useSession.ts';
 import { useShortcuts } from './hooks/useShortcuts.ts';
 import { usePalette, useTheme } from './hooks/useTheme.ts';
 import { useToast } from './hooks/useToast.ts';
@@ -45,6 +46,9 @@ type Modal = 'import' | 'sync' | 'command' | 'versions' | null;
 
 export default function App({ initial, api = defaultApi }: AppProps) {
   const archive = useArchive(api, initial);
+  // 只决定显示哪些按钮；写接口在服务端各自校验身份。
+  const session = useSession(api);
+  const owner = session.owner;
   const [browse, dispatch] = useReducer(browseReducer, initial?.data?.reports[0]?.id ?? '', initialBrowse);
   const { reportId, open: openRoute, close: closeReport, linkTo } = useReportRoute();
   const [theme, toggleTheme] = useTheme();
@@ -175,6 +179,12 @@ export default function App({ initial, api = defaultApi }: AppProps) {
     await refresh();
   }, [navigate, refresh, showToast]);
 
+  // 首屏归档在服务端读取，不带登录身份，失败明细被省略；确认是所有者后重新读一次。
+  const hasFailures = (archive.sync?.failed ?? 0) > 0;
+  useEffect(() => {
+    if (owner && hasFailures) void refresh();
+  }, [owner, hasFailures, refresh]);
+
   const changeDensity = useCallback((next: Density) => densityStore.set(next), []);
 
   return (
@@ -192,7 +202,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         onNavigate={navigate}
         onToggleTheme={toggleTheme}
         onToggleMobileNav={() => setMobileNav((open) => !open)}
-        onImport={() => setModal('import')}
+        onImport={owner ? () => setModal('import') : undefined}
         onCommand={() => setModal('command')}
       />
       <div className="app-shell">
@@ -252,14 +262,22 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         </main>
       </div>
       <Toast message={toast} />
-      <ImportDialog open={modal === 'import'} onOpenChange={(open) => setModal(open ? 'import' : null)} onSubmit={handleImport} />
-      <SyncDialog open={modal === 'sync'} onOpenChange={(open) => setModal(open ? 'sync' : null)} api={api} sync={archive.sync} onRefresh={handleRefresh} />
+      {owner && <ImportDialog open={modal === 'import'} onOpenChange={(open) => setModal(open ? 'import' : null)} onSubmit={handleImport} />}
+      <SyncDialog
+        open={modal === 'sync'}
+        onOpenChange={(open) => setModal(open ? 'sync' : null)}
+        api={api}
+        sync={archive.sync}
+        session={session}
+        onRefresh={handleRefresh}
+      />
       {reading && (
         <VersionsDialog
           open={modal === 'versions'}
           onOpenChange={(open) => setModal(open ? 'versions' : null)}
           api={api}
           report={reading}
+          canManage={owner}
           onRestored={handleRestored}
           onDeleted={handleDeleted}
         />
@@ -276,7 +294,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         onSearch={search}
         onPalette={setPalette}
         onToggleTheme={toggleTheme}
-        onImport={() => setModal('import')}
+        onImport={owner ? () => setModal('import') : undefined}
         onOpenSync={() => setModal('sync')}
         onRefresh={handleRefresh}
       />

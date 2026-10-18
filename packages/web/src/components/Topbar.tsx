@@ -1,12 +1,15 @@
 import { Menu, Moon, Plus, Sun } from 'lucide-react';
-import type { Theme } from '../lib/theme.ts';
+import type { Palette, Theme } from '../lib/theme.ts';
 import type { View } from '../state/browse.ts';
+import PalettePicker from './PalettePicker.tsx';
 
 interface TopbarProps {
   view: View;
   reading: boolean;
   savedCount: number;
   theme: Theme;
+  palette?: Palette;
+  onPalette?: (next: Palette) => void;
   onNavigate: (view: View) => void;
   onToggleTheme: () => void;
   onToggleMobileNav: () => void;
@@ -19,7 +22,7 @@ const NAV: { view: View; label: string }[] = [
   { view: 'saved', label: '稍后阅读' },
 ];
 
-export default function Topbar({ view, reading, savedCount, theme, onNavigate, onToggleTheme, onToggleMobileNav, onImport }: TopbarProps) {
+export default function Topbar({ view, reading, savedCount, theme, palette, onPalette, onNavigate, onToggleTheme, onToggleMobileNav, onImport }: TopbarProps) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -43,6 +46,7 @@ export default function Topbar({ view, reading, savedCount, theme, onNavigate, o
           <button className="btn btn-ghost btn-icon mobile-menu" aria-label="展开分类导航" onClick={onToggleMobileNav}>
             <Menu size={18} />
           </button>
+          {palette && onPalette && <PalettePicker palette={palette} onChange={onPalette} />}
           <button className="btn btn-ghost btn-icon" aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'} onClick={onToggleTheme}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>

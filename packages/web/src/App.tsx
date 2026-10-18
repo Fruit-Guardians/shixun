@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Category, ImportRequest } from '#shared';
 import { createApiClient } from './api/client.ts';
 import type { ApiClient } from './api/client.ts';
@@ -17,9 +17,10 @@ import { useLocalStore } from './hooks/useLocalStore.ts';
 import { useReportRoute } from './hooks/useReportRoute.ts';
 import { useShowBackToTop } from './hooks/useScroll.ts';
 import { useShortcuts } from './hooks/useShortcuts.ts';
-import { useTheme } from './hooks/useTheme.ts';
+import { usePalette, useTheme } from './hooks/useTheme.ts';
 import { useToast } from './hooks/useToast.ts';
 import { densityStore, savedStore } from './lib/preferences.ts';
+import { syncThemeColor } from './lib/theme.ts';
 import type { Density } from './lib/preferences.ts';
 import { deriveBrowse } from './lib/selectors.ts';
 import type { InitialArchive } from './state/archive.ts';
@@ -43,6 +44,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
   const [browse, dispatch] = useReducer(browseReducer, initial?.data?.reports[0]?.id ?? '', initialBrowse);
   const { reportId, open: openRoute, close: closeReport, linkTo } = useReportRoute();
   const [theme, toggleTheme] = useTheme();
+  const [palette, setPalette] = usePalette();
   const saved = useLocalStore(savedStore);
   const density = useLocalStore(densityStore);
   const savedIds = useMemo(() => new Set(saved), [saved]);
@@ -54,6 +56,9 @@ export default function App({ initial, api = defaultApi }: AppProps) {
 
   const model = useMemo(() => deriveBrowse(archive.reports, browse, savedIds), [archive.reports, browse, savedIds]);
   const reading = archive.reports.find((r) => r.id === reportId);
+
+  // 地址栏颜色跟随配色与明暗。
+  useEffect(syncThemeColor, [theme, palette]);
 
   useShortcuts({
     onSearch: useCallback(() => searchRef.current?.focus(), []),
@@ -146,6 +151,8 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         reading={Boolean(reading)}
         savedCount={saved.length}
         theme={theme}
+        palette={palette}
+        onPalette={setPalette}
         onNavigate={navigate}
         onToggleTheme={toggleTheme}
         onToggleMobileNav={() => setMobileNav((open) => !open)}

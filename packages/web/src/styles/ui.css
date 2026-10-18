@@ -1,12 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Silkscreen&display=swap');
 /* 拾讯 UI — 终端 / 8-bit 风格。深色为「荧光终端」，浅色为「纸质终端」。 */
+/* 配色方案：每套同时给出浅色(--l-*)与深色(--d-*)，由下方主题块映射到实际令牌。 */
 :root{
- --bg:#f2efe4;--surface:#fbf9f1;--surface-2:#ebe7d9;--surface-3:#e0dbc9;
- --ink:#1a1d18;--ink-2:#3c4237;--ink-3:#6b7064;--line:#cfc9b5;--line-2:#a9a38d;
- --accent:#0f7a35;--accent-ink:#f6f4ea;--accent-soft:#d7ead0;--accent-text:#0b6a2d;
- --warn:#9a6700;--warn-soft:#f3e3bb;--danger:#b42318;--danger-soft:#f6d8d3;
+ --l-bg:#f2efe4;--l-surface:#fbf9f1;--l-surface-2:#ebe7d9;--l-surface-3:#e0dbc9;--l-ink:#1a1d18;--l-ink-2:#3c4237;--l-ink-3:#64685d;--l-line:#cfc9b5;--l-line-2:#a9a38d;--l-accent:#0f7a35;--l-accent-ink:#f6f4ea;--l-accent-soft:#d7ead0;--l-accent-text:#0b6a2d;
+ --d-bg:#07090a;--d-surface:#0c1110;--d-surface-2:#111917;--d-surface-3:#18221f;--d-ink:#d6f5dc;--d-ink-2:#9fc4a7;--d-ink-3:#6a8c73;--d-line:#1d2b25;--d-line-2:#2e4438;--d-accent:#39ff88;--d-accent-ink:#04120a;--d-accent-soft:#0f2a1a;--d-accent-text:#5dff9d;
+}
+:root[data-palette=amber]{
+ --l-bg:#f5eedf;--l-surface:#fcf8ee;--l-surface-2:#efe5d0;--l-surface-3:#e5d8bd;--l-ink:#241a0e;--l-ink-2:#4a3a24;--l-ink-3:#75624d;--l-line:#d8c8a8;--l-line-2:#b4a07c;--l-accent:#af5a00;--l-accent-ink:#fff8ec;--l-accent-soft:#f6e0bd;--l-accent-text:#9a4f00;
+ --d-bg:#0b0906;--d-surface:#120f0a;--d-surface-2:#19140d;--d-surface-3:#221b12;--d-ink:#ffe9c2;--d-ink-2:#d9b882;--d-ink-3:#9a7f55;--d-line:#2b2216;--d-line-2:#45361f;--d-accent:#ffb000;--d-accent-ink:#140b00;--d-accent-soft:#2e2109;--d-accent-text:#ffc23d;
+}
+:root[data-palette=ice]{
+ --l-bg:#eef2f4;--l-surface:#f9fbfc;--l-surface-2:#e3eaee;--l-surface-3:#d6e0e6;--l-ink:#0f1a22;--l-ink-2:#33444f;--l-ink-3:#5a6a75;--l-line:#c3d0d8;--l-line-2:#9aabb6;--l-accent:#0b6e99;--l-accent-ink:#f2f8fb;--l-accent-soft:#d3e8f2;--l-accent-text:#075d82;
+ --d-bg:#060a0e;--d-surface:#0a1118;--d-surface-2:#0f1821;--d-surface-3:#15212d;--d-ink:#d6ecff;--d-ink-2:#9dbcd6;--d-ink-3:#69859e;--d-line:#182635;--d-line-2:#283d52;--d-accent:#4de1ff;--d-accent-ink:#021018;--d-accent-soft:#0b2733;--d-accent-text:#7ae9ff;
+}
+:root[data-palette=synth]{
+ --l-bg:#f4eef4;--l-surface:#fcf8fc;--l-surface-2:#ece2ec;--l-surface-3:#e2d4e3;--l-ink:#1e1424;--l-ink-2:#46344f;--l-ink-3:#715f7a;--l-line:#d6c5d8;--l-line-2:#b29fb6;--l-accent:#b5178a;--l-accent-ink:#fff3fb;--l-accent-soft:#f3d6ea;--l-accent-text:#9c1277;
+ --d-bg:#0c0714;--d-surface:#120b1d;--d-surface-2:#191027;--d-surface-3:#221634;--d-ink:#f5dcff;--d-ink-2:#c9a3dc;--d-ink-3:#9274a7;--d-line:#2a1b3d;--d-line-2:#43305d;--d-accent:#ff4fd8;--d-accent-ink:#1a0414;--d-accent-soft:#331033;--d-accent-text:#ff7ae2;
+}
+:root[data-palette=mono]{
+ --l-bg:#f0f0ec;--l-surface:#fafaf8;--l-surface-2:#e6e6e1;--l-surface-3:#dadad4;--l-ink:#111111;--l-ink-2:#383838;--l-ink-3:#656565;--l-line:#cacac4;--l-line-2:#a3a39c;--l-accent:#111111;--l-accent-ink:#f5f5f0;--l-accent-soft:#e0e0da;--l-accent-text:#111111;
+ --d-bg:#0a0a0a;--d-surface:#111111;--d-surface-2:#171717;--d-surface-3:#1f1f1f;--d-ink:#ececec;--d-ink-2:#b5b5b5;--d-ink-3:#818181;--d-line:#262626;--d-line-2:#3d3d3d;--d-accent:#f2f2f2;--d-accent-ink:#0a0a0a;--d-accent-soft:#262626;--d-accent-text:#ffffff;
+}
+:root{
+ --bg:var(--l-bg);--surface:var(--l-surface);--surface-2:var(--l-surface-2);--surface-3:var(--l-surface-3);--ink:var(--l-ink);--ink-2:var(--l-ink-2);--ink-3:var(--l-ink-3);--line:var(--l-line);--line-2:var(--l-line-2);--accent:var(--l-accent);--accent-ink:var(--l-accent-ink);--accent-soft:var(--l-accent-soft);--accent-text:var(--l-accent-text);
+ --warn:#865a00;--warn-soft:#f3e3bb;--danger:#b42318;--danger-soft:#f6d8d3;
  --c0:#0f7a35;--c1:#b42318;--c2:#8250df;--c3:#0969da;--c4:#1a7f6e;--c5:#9a6700;--c6:#57606a;
- --frame:var(--ink);--hard:4px 4px 0 var(--ink);--hard-sm:2px 2px 0 var(--ink);
+ --frame:var(--ink);--edge:var(--ink);--hard:4px 4px 0 var(--ink);--hard-sm:2px 2px 0 var(--ink);--lift:var(--hard-sm);
  --scan:transparent;--glow:none;
  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',monospace;
  --pixel:'Silkscreen','JetBrains Mono',ui-monospace,monospace;
@@ -15,23 +34,19 @@
  color-scheme:light;font-family:var(--mono);color:var(--ink);background:var(--bg);font-synthesis:none;
 }
 :root[data-theme=dark]{
- --bg:#07090a;--surface:#0c1110;--surface-2:#111917;--surface-3:#18221f;
- --ink:#d6f5dc;--ink-2:#9fc4a7;--ink-3:#6a8c73;--line:#1d2b25;--line-2:#2e4438;
- --accent:#39ff88;--accent-ink:#04120a;--accent-soft:#0f2a1a;--accent-text:#5dff9d;
+ --bg:var(--d-bg);--surface:var(--d-surface);--surface-2:var(--d-surface-2);--surface-3:var(--d-surface-3);--ink:var(--d-ink);--ink-2:var(--d-ink-2);--ink-3:var(--d-ink-3);--line:var(--d-line);--line-2:var(--d-line-2);--accent:var(--d-accent);--accent-ink:var(--d-accent-ink);--accent-soft:var(--d-accent-soft);--accent-text:var(--d-accent-text);
  --warn:#ffcc4d;--warn-soft:#2a2410;--danger:#ff6b6b;--danger-soft:#2c1414;
  --c0:#39ff88;--c1:#ff6b6b;--c2:#c792ea;--c3:#59c2ff;--c4:#4fe0c0;--c5:#ffcc4d;--c6:#8fa3b0;
- --frame:var(--line-2);--hard:4px 4px 0 var(--accent-soft);--hard-sm:2px 2px 0 var(--accent-soft);
- --scan:rgb(57 255 136/.025);--glow:0 0 12px rgb(57 255 136/.35);
+ --frame:var(--line-2);--edge:var(--accent);--hard:4px 4px 0 var(--accent-soft);--hard-sm:2px 2px 0 var(--accent-soft);--lift:var(--glow);
+ --scan:color-mix(in srgb,var(--accent) 3%,transparent);--glow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent);
  color-scheme:dark;
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
- --bg:#07090a;--surface:#0c1110;--surface-2:#111917;--surface-3:#18221f;
- --ink:#d6f5dc;--ink-2:#9fc4a7;--ink-3:#6a8c73;--line:#1d2b25;--line-2:#2e4438;
- --accent:#39ff88;--accent-ink:#04120a;--accent-soft:#0f2a1a;--accent-text:#5dff9d;
+ --bg:var(--d-bg);--surface:var(--d-surface);--surface-2:var(--d-surface-2);--surface-3:var(--d-surface-3);--ink:var(--d-ink);--ink-2:var(--d-ink-2);--ink-3:var(--d-ink-3);--line:var(--d-line);--line-2:var(--d-line-2);--accent:var(--d-accent);--accent-ink:var(--d-accent-ink);--accent-soft:var(--d-accent-soft);--accent-text:var(--d-accent-text);
  --warn:#ffcc4d;--warn-soft:#2a2410;--danger:#ff6b6b;--danger-soft:#2c1414;
  --c0:#39ff88;--c1:#ff6b6b;--c2:#c792ea;--c3:#59c2ff;--c4:#4fe0c0;--c5:#ffcc4d;--c6:#8fa3b0;
- --frame:var(--line-2);--hard:4px 4px 0 var(--accent-soft);--hard-sm:2px 2px 0 var(--accent-soft);
- --scan:rgb(57 255 136/.025);--glow:0 0 12px rgb(57 255 136/.35);
+ --frame:var(--line-2);--edge:var(--accent);--hard:4px 4px 0 var(--accent-soft);--hard-sm:2px 2px 0 var(--accent-soft);--lift:var(--glow);
+ --scan:color-mix(in srgb,var(--accent) 3%,transparent);--glow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent);
  color-scheme:dark;
 }}
 
@@ -386,4 +401,38 @@ mark{background:var(--warn);color:#111;padding:0 1px}
 @media(max-width:480px){.btn-label{display:none}.btn-label-wrap{width:36px;padding:0}.reader-actions .outline-button span{display:none}.hero-stats>span:nth-child(3){display:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 @media print{body:after,.topbar,.sidebar,.toc,.reader-toolbar,.to-top,.reading-progress{display:none!important}.app-shell{display:block;padding:0}.window{border:0;box-shadow:none}.window-bar{display:none}}
+
+/* 跟随系统深色时同样生效 */
+@media(prefers-color-scheme:dark){
+:root:not([data-theme=light]) .btn-primary{border-color:var(--accent);box-shadow:var(--glow)}
+:root:not([data-theme=light]) .brandmark{border-color:var(--accent);box-shadow:var(--glow)}
+:root:not([data-theme=light]) .filter-tabs button.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+:root:not([data-theme=light]) .story-card:hover,:root:not([data-theme=light]) .story-card:focus-within{border-color:var(--accent);box-shadow:4px 4px 0 var(--accent-soft),var(--glow)}
+:root:not([data-theme=light]) .archive-card:hover{border-color:var(--accent)}
+:root:not([data-theme=light]) .toast{background:var(--surface);color:var(--ink);border-color:var(--accent)}
+:root:not([data-theme=light]) .toast b{color:var(--accent)}
+:root:not([data-theme=light]) .modal{border-color:var(--accent)!important;box-shadow:6px 6px 0 var(--accent-soft),var(--glow)!important}
+:root:not([data-theme=light]) .setup-steps li>span{background:var(--accent);color:var(--accent-ink)}
+:root:not([data-theme=light]) .primary-button{border-color:var(--accent);box-shadow:var(--glow)}
+}
+
+/* 配色菜单 */
+.palette-picker{position:relative}
+.palette-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:220px;padding:6px;border:2px solid var(--edge);background:var(--surface);box-shadow:var(--hard),var(--glow);animation:menu-in .14s steps(3)}
+@keyframes menu-in{from{opacity:0;transform:translateY(-4px)}}
+.palette-menu-title{margin:2px 6px 6px;font-size:11px;color:var(--ink-3)}
+.palette-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:6px;text-align:left;font-size:13px;color:var(--ink-2)}
+.palette-menu button:hover{background:var(--surface-2);color:var(--ink)}
+.palette-menu button.on{background:var(--accent-soft);color:var(--accent-text);font-weight:700}
+.palette-menu button svg{margin-left:auto}
+.palette-name{display:flex;flex-direction:column;line-height:1.3}
+.palette-name small{font-size:10px;color:var(--ink-3);font-weight:400;letter-spacing:.06em}
+.palette-swatch{display:grid;place-items:center;width:34px;height:26px;font-family:var(--pixel);font-size:11px;background:var(--sw-bg);color:var(--sw-fg);border:2px solid var(--sw-fg);box-shadow:2px 2px 0 var(--sw-paper);text-shadow:0 0 6px var(--sw-fg)}
+.palette-swatch[data-p=phosphor]{--sw-bg:#07090a;--sw-fg:#39ff88;--sw-paper:#0f7a35}
+.palette-swatch[data-p=amber]{--sw-bg:#0b0906;--sw-fg:#ffb000;--sw-paper:#af5a00}
+.palette-swatch[data-p=ice]{--sw-bg:#060a0e;--sw-fg:#4de1ff;--sw-paper:#0b6e99}
+.palette-swatch[data-p=synth]{--sw-bg:#0c0714;--sw-fg:#ff4fd8;--sw-paper:#b5178a}
+.palette-swatch[data-p=mono]{--sw-bg:#0a0a0a;--sw-fg:#f2f2f2;--sw-paper:#6a6a6a}
+@media(max-width:860px){.palette-picker{position:static}.palette-menu{right:16px;top:calc(100% + 6px)}}
+@media(max-width:480px){.hero-date small:first-child{display:none}}
 

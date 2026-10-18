@@ -1,4 +1,7 @@
 import { SYNC_PROTOCOL_CURRENT, SYNC_PROTOCOL_HEADER } from '#shared';
+import { ACCESS_JWT_HEADER, defaultAccessVerifier } from './access.ts';
+import type { AccessIdentity, AccessVerifier } from './access.ts';
+import type { ApiEnv } from './env.ts';
 
 export interface PlatformUser {
   userId: string;
@@ -73,12 +76,58 @@ export function isSameOrigin(request: Request, options: { allowMissing: boolean 
 
 /**
  * 站点所有者检查。未配置 OWNER_EMAILS 时不额外限制（由站点私有访问兜底）；
- * 配置后邮箱必须在名单内（不区分大小写）。
+ * 配置后邮箱必须在名单内（不区分大小写）。`required` 时（Access 模式）未配置即无人是所有者。
  */
-export function isOwner(user: PlatformUser, ownerEmails: string | undefined): boolean {
+export function isOwner(user: PlatformUser, ownerEmails: string | undefined, required = false): boolean {
   const allowed = (ownerEmails ?? '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-  return allowed.length === 0 || allowed.includes(user.email.toLowerCase());
+  return (allowed.length === 0 && !required) || allowed.includes(user.email.toLowerCase());
+}
+
+export const ACCESS_PROVIDER = 'cloudflare-access';
+
+/** 本次请求的调用方：登录用户、程序同步，或都不是。 */
+export interface Caller {
+  user: PlatformUser | null;
+  /** 受保护的程序同步（Google Apps Script）。 */
+  programSync: boolean;
+  /** 是否使用 Cloudflare Access 认证。 */
+  access: boolean;
+}
+
+export function usesAccess(env: ApiEnv): boolean {
+  return env.AUTH_PROVIDER === ACCESS_PROVIDER;
+}
+
+/** 读取并校验 Access JWT；未配置团队域名或 AUD 时一律失败（宁可拒绝，不可放行）。 */
+export async function verifyAccess(request: Request, env: ApiEnv, verifier: AccessVerifier): Promise<AccessIdentity | null> {
+  const token = request.headers.get(ACCESS_JWT_HEADER);
+  if (!token || !env.CF_ACCESS_TEAM_DOMAIN || !env.CF_ACCESS_AUD) return null;
+  return verifier.verify(token, { teamDomain: env.CF_ACCESS_TEAM_DOMAIN, aud: env.CF_ACCESS_AUD });
+}
+
+export async function resolveCaller(request: Request, env: ApiEnv, verifier: AccessVerifier): Promise<Caller> {
+  if (!usesAccess(env)) return { user: getPlatformUser(request.headers), programSync: isProgramSync(request), access: false };
+
+  const identity = await verifyAccess(request, env, verifier);
+  if (identity?.kind === 'user') {
+    return { user: { userId: identity.sub, displayName: identity.email, email: identity.email, fullName: null }, programSync: false, access: true };
+  }
+  // 程序同步需要服务令牌 JWT，同时仍满足协议头与「非浏览器」要求。
+  return { user: null, programSync: identity?.kind === 'service' && isProgramSync(request), access: true };
+}
+
+/**
+ * Worker 入口的整站闸门：Access 模式下，没有有效 Access JWT 的请求（页面与接口）一律拒绝，
+ * 防止绕过 Access 直接访问 Worker（例如未受保护的域名）。非 Access 模式返回 null，不做处理。
+ */
+export async function accessGate(request: Request, env: ApiEnv, verifier: AccessVerifier = defaultAccessVerifier): Promise<Response | null> {
+  if (!usesAccess(env)) return null;
+  if (await verifyAccess(request, env, verifier)) return null;
+  return new Response('需要通过 Cloudflare Access 登录后访问。', {
+    status: 403,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, no-store' },
+  });
 }

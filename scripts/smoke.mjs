@@ -4,14 +4,22 @@
  *   npm run smoke                                  # 默认 http://127.0.0.1:5173
  *   SMOKE_BASE_URL=https://example.site npm run smoke
  *
+ * 站点在 Cloudflare Access 后面时，带上服务令牌（只用于通过 Access，写操作仍应全部被拒绝）：
+ *   CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=… SMOKE_BASE_URL=https://… npm run smoke
+ *
  * 线上站点在私有入口后面时，未登录请求可能被入口拦下：拒绝类检查只要求「不是 2xx」，
  * 读取类检查需要能直接访问 /api/*。列表读取失败（例如迁移未执行导致 503）会直接报出响应内容。
  */
 const base = (process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:5173').replace(/\/+$/, '');
 const results = [];
 
+const accessHeaders =
+  process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET
+    ? { 'cf-access-client-id': process.env.CF_ACCESS_CLIENT_ID, 'cf-access-client-secret': process.env.CF_ACCESS_CLIENT_SECRET }
+    : {};
+
 async function call(path, init = {}) {
-  const response = await fetch(base + path, { redirect: 'manual', ...init });
+  const response = await fetch(base + path, { redirect: 'manual', ...init, headers: { ...accessHeaders, ...init.headers } });
   const text = await response.text();
   let json = null;
   try {

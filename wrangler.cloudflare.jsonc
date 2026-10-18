@@ -1,0 +1,26 @@
+// 直接部署到 Cloudflare Workers（不经过 Sites）的配置。步骤见 DEPLOY.md。
+// 构建：npm run build:cloudflare；部署：npm run deploy:cloudflare。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shixun",
+  "main": "./app/_host/cloudflare-worker.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  // 预览地址不在 Access 应用范围内；关掉，避免出现未受保护的入口。
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shixun",
+      // 运行 `npx wrangler d1 create shixun` 后，把输出的 database_id 填在这里。
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  // 非机密配置。CF_ACCESS_AUD 与 OWNER_EMAILS 用 `wrangler secret put` 设置（部署不会覆盖）；缺失时写操作一律拒绝。
+  "vars": {
+    "AUTH_PROVIDER": "cloudflare-access",
+    "CF_ACCESS_TEAM_DOMAIN": "tiny-silence-378c.cloudflareaccess.com"
+  }
+}

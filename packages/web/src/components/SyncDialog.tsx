@@ -111,7 +111,8 @@ function SyncPanel({ api, sync, onRefresh }: Omit<SyncDialogProps, 'open' | 'onO
           <div>
             <strong>设置私密连接凭证</strong>
             <p>
-              项目设置 → 脚本属性 → 添加 <code>SITE_SERVICE_TOKEN</code>，将复制的凭证作为值保存。凭证提供站点访问权限，请仅存入你自己的脚本属性。
+              项目设置 → 脚本属性 → 添加 <code>SITE_SERVICE_TOKEN</code>，将复制的凭证作为值保存。部署在 Cloudflare Access 后面时，改为保存服务令牌的{' '}
+              <code>CF_ACCESS_CLIENT_ID</code>、<code>CF_ACCESS_CLIENT_SECRET</code> 和站点地址 <code>SITE_URL</code>。凭证提供站点访问权限，请仅存入你自己的脚本属性。
             </p>
             <button className="outline-button" disabled={copying} onClick={copyCredential}>
               <Copy size={15} />

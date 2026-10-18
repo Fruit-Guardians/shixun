@@ -1,15 +1,21 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.2.0
+  version: 3.3.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
     unsupported methods return 405 with an `Allow` header. 503 means storage is missing or temporarily
     unavailable and the request is safe to retry.
 
-    Identity comes from the Sites ingress: `oai-authenticated-user-*` headers for signed-in visitors and
-    `OAI-Sites-Authorization` for program sync. The API trusts these headers and does not re-verify them.
+    Identity depends on `AUTH_PROVIDER`:
+    - unset / `sites`: from the Sites ingress (`oai-authenticated-user-*` headers for signed-in visitors,
+      `OAI-Sites-Authorization` for program sync). The API trusts these headers and does not re-verify them.
+    - `cloudflare-access`: only the `Cf-Access-Jwt-Assertion` JWT signed by Cloudflare Access counts (RS256,
+      team issuer, application AUD, expiry). A user JWT carries the email; a service-token JWT (no email) is
+      the only way to call `/api/sync*`, still with `X-Sites-Report-Sync`. Plain identity headers are ignored,
+      requests without a valid JWT are rejected before reaching any route, and owner actions require
+      `OWNER_EMAILS`.
 paths:
   /api/health:
     get:
@@ -227,6 +233,7 @@ paths:
                   token: {type: string}
         '401': {$ref: '#/components/responses/Error'}
         '403': {description: 'Origin mismatch, or signed in but not an owner (code: not_owner)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '409': {description: 'Cloudflare Access deployment: the script uses an Access service token instead (code: access_service_token)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '503': {description: Runtime credential not configured, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
 components:
   securitySchemes:

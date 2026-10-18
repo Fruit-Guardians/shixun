@@ -1,4 +1,5 @@
 import type { Report } from '#shared';
+import type { Caller } from './auth.ts';
 import type { ApiEnv } from './env.ts';
 import { HttpError } from './http.ts';
 
@@ -11,6 +12,8 @@ export interface RequestContext {
   seeds: readonly Report[];
   /** 本次请求的时间；整个请求内保持一致。 */
   now: Date;
+  /** 解析调用方身份（按需、每个请求只解析一次）。 */
+  caller: () => Promise<Caller>;
 }
 
 export type Handler = (context: RequestContext) => Response | Promise<Response>;

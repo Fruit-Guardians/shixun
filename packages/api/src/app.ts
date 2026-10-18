@@ -1,4 +1,7 @@
 import { apiPaths } from '#shared';
+import { defaultAccessVerifier } from './access.ts';
+import { resolveCaller } from './auth.ts';
+import type { Caller } from './auth.ts';
 import type { ApiEnv, ApiOptions } from './env.ts';
 import { HttpError, errorResponse, json } from './http.ts';
 import { Router } from './router.ts';
@@ -36,11 +39,14 @@ export function createApiHandler(options: ApiOptions = {}): ApiHandler {
   const router = buildRouter();
   const seeds = options.seedReports ?? [];
   const clock = options.now ?? (() => new Date());
+  const verifier = options.accessVerifier ?? defaultAccessVerifier;
   return async (request, env) => {
     try {
       const url = new URL(request.url);
       const { handler, params } = router.resolve(request.method, url.pathname);
-      return await handler({ request, url, env, params, seeds, now: clock() });
+      let caller: Promise<Caller> | undefined;
+      const resolve = () => (caller ??= resolveCaller(request, env, verifier));
+      return await handler({ request, url, env, params, seeds, now: clock(), caller: resolve });
     } catch (error) {
       if (error instanceof HttpError) return errorResponse(error);
       console.error('api unhandled error', error);

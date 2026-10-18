@@ -38,7 +38,7 @@ http.ts        HttpError、统一错误响应；所有响应默认带 no-store +
 auth.ts        平台登录头、所有者名单、程序同步协议、同源检查、常量时间比较
 router.ts      极小路由器：路径参数、404、405 + Allow
 ```
-运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
+运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`、`AUTH_PROVIDER`、`CF_ACCESS_TEAM_DOMAIN`、`CF_ACCESS_AUD`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
 
 查询约定：
 - 单篇下载（Apps Script 每个文件回读一次）只按 id 查一行，不加载整个归档。
@@ -59,7 +59,14 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 - 前端输入防抖 200 ms、新请求取消旧请求；搜索失败时退回本地的标题 + 摘要匹配并提示。
 
 ### 信任边界
-身份全部来自 Sites 入口，API 不再二次校验：
+身份来源由 `AUTH_PROVIDER` 决定，路由只通过 `context.caller()` 取得调用方（`{ user, programSync, access }`），不直接读请求头。
+
+**Cloudflare Access（`AUTH_PROVIDER=cloudflare-access`，见 DEPLOY.md）**：明文身份头一律忽略，只认 Access 签名的 `Cf-Access-Jwt-Assertion`（`access.ts`：RS256、团队 JWKS、签发方、AUD、有效期，公钥按团队缓存 10 分钟，遇到未知 kid 提前刷新）。
+- Worker 入口（`app/_host/cloudflare-worker.ts`）先过 `accessGate`：没有有效 JWT 的请求，页面和接口一律 403，防止绕过 Access 直连 Worker。
+- 用户 JWT 带邮箱，即登录用户；服务令牌 JWT 没有邮箱，只能用于 `/api/sync*`（仍需协议头、不能来自浏览器），不能当用户导入或做所有者操作。
+- 所有者操作必须配置 `OWNER_EMAILS`；团队域名或 AUD 缺失时一律拒绝。
+
+**Sites（未设置 `AUTH_PROVIDER`）**：身份全部来自 Sites 入口，API 不再二次校验。这种模式只能部署在 Sites 后面，否则身份头可以伪造：
 - `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。
 - `/api/sync*`：凭证 `OAI-Sites-Authorization` 由入口校验；API 只识别协议头 `X-Sites-Report-Sync`，并拒绝带 `Origin` / `Sec-Fetch-Site` 的浏览器请求。
 - `setup-credential`：需同源、已登录；配置 `OWNER_EMAILS`（逗号分隔，不区分大小写）后只有名单内账号能取回凭证，未配置时依赖站点本身的私有访问。
@@ -81,7 +88,7 @@ App.tsx            组合以上各层
 浏览器偏好（主题、布局、收藏）通过 `useSyncExternalStore` 读取 localStorage，服务端渲染与水合一致，存储不可用时退回内存。
 
 ## 为什么仍然是一个 Worker
-站点托管在 Sites 平台：构建产物是单个 Worker（`vinext build`），登录身份由平台入口注入请求头（`oai-authenticated-user-*`），程序同步凭证也在平台入口校验。因此部署形态保持单 Worker，分离发生在代码与契约层。
+站点托管在 Sites 平台或直接部署在 Cloudflare Workers（`npm run build:cloudflare`，配置 `wrangler.cloudflare.jsonc`）：构建产物是单个 Worker（`vinext build`），登录身份由平台入口注入请求头（`oai-authenticated-user-*`），程序同步凭证也在平台入口校验。因此部署形态保持单 Worker，分离发生在代码与契约层。
 
 如果将来需要独立部署，接缝已经就位：`createApiHandler` 是普通的 Fetch 处理器，可以挂到单独的 Worker；前端把 `createApiClient({ baseUrl })` 指向它即可。需要额外处理的是跨域（CORS）与身份传递，目前**没有实现，也没有做过独立部署的验证**。
 

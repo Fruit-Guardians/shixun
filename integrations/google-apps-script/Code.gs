@@ -14,7 +14,7 @@ function installSync() {
   if (result.failed) throw new Error('有文件同步失败，请先查看执行日志；暂未安装定时器。');
   const triggers = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'syncDriveReports');
   if (!triggers.length) ScriptApp.newTrigger('syncDriveReports').timeBased().everyMinutes(15).create();
-  recordRun_(PropertiesService.getScriptProperties().getProperty('SITE_SERVICE_TOKEN'), result);
+  recordRun_(siteAccess_(PropertiesService.getScriptProperties()), result);
   console.log(JSON.stringify({installed: true, intervalMinutes: 15, ...result}));
 }
 
@@ -25,8 +25,8 @@ function syncDriveReports() {
   const props = PropertiesService.getScriptProperties();
   const result = {created: 0, updated: 0, unchanged: 0, failed: 0, failures: []};
   try {
-    const access = props.getProperty('SITE_SERVICE_TOKEN');
-    if (!access) throw new Error('请先在脚本属性设置 SITE_SERVICE_TOKEN。不要把凭证写进源代码或日志。');
+    const access = siteAccess_(props);
+    if (!access) throw new Error('请先在脚本属性设置 CF_ACCESS_CLIENT_ID 与 CF_ACCESS_CLIENT_SECRET（Cloudflare Access），或 SITE_SERVICE_TOKEN。不要把凭证写进源代码或日志。');
     const cursor = props.getProperty('DRIVE_SCAN_CURSOR');
     let files;
     try { files = cursor ? DriveApp.continueFileIterator(cursor) : DriveApp.getFolderById(CONFIG.folderId).getFiles(); }
@@ -67,11 +67,26 @@ function syncDriveReports() {
   } finally { lock.releaseLock(); }
 }
 
-function siteRequest_(path, method, token, payload) {
-  // 禁止重定向，避免把站点凭证转发给其他域名。
-  const options = {method, headers: {'OAI-Sites-Authorization': 'Bearer ' + token, 'X-Sites-Report-Sync': 'google-apps-script'}, followRedirects: false, muteHttpExceptions: true};
+/**
+ * 站点地址与凭证都来自脚本属性（SITE_URL 可覆盖默认地址）。
+ * 部署在 Cloudflare Access 后面时用服务令牌；部署在 Sites 时用 SITE_SERVICE_TOKEN。都没有则返回 null。
+ */
+function siteAccess_(props) {
+  const url = String(props.getProperty('SITE_URL') || CONFIG.siteUrl).replace(/\/+$/, '');
+  if (!/^https:\/\/[^/?#]+$/.test(url)) throw new Error('SITE_URL 必须是 https://域名 形式，不带路径。');
+  const clientId = props.getProperty('CF_ACCESS_CLIENT_ID');
+  const clientSecret = props.getProperty('CF_ACCESS_CLIENT_SECRET');
+  if (clientId && clientSecret) return {url, headers: {'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret}};
+  const token = props.getProperty('SITE_SERVICE_TOKEN');
+  return token ? {url, headers: {'OAI-Sites-Authorization': 'Bearer ' + token}} : null;
+}
+
+function siteRequest_(path, method, access, payload) {
+  // 禁止重定向，避免把站点凭证转发给其他域名（Access 拒绝时也会以重定向回应）。
+  const headers = Object.assign({}, access.headers, {'X-Sites-Report-Sync': 'google-apps-script'});
+  const options = {method, headers, followRedirects: false, muteHttpExceptions: true};
   if (payload) { options.contentType = 'application/json'; options.payload = JSON.stringify(payload); }
-  const response = UrlFetchApp.fetch(CONFIG.siteUrl + path, options);
+  const response = UrlFetchApp.fetch(access.url + path, options);
   const code = response.getResponseCode();
   if (code !== 200) throw new Error('站点返回 HTTP ' + code + '：' + siteErrorMessage_(response, code));
   return method === 'get' ? response.getContentText('UTF-8') : JSON.parse(response.getContentText('UTF-8'));
@@ -83,7 +98,7 @@ function siteErrorMessage_(response, code) {
     const body = JSON.parse(response.getContentText('UTF-8'));
     if (body && typeof body.error === 'string' && body.error) return body.error;
   } catch (_) { /* 非 JSON（如入口拦截页） */ }
-  return code === 401 || code === 403 ? '凭证或访问范围可能需要检查。' : '请稍后重试。';
+  return code === 401 || code === 403 || (code >= 300 && code < 400) ? '凭证或访问范围可能需要检查。' : '请稍后重试。';
 }
 
 function extractReportDate_(name, raw) {
@@ -104,7 +119,7 @@ function sha256_(raw) {
 /** 只删除本项目中属于本同步器的定时触发器。 */
 function disableSync() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'syncDriveReports').forEach(t => ScriptApp.deleteTrigger(t));
-  const access = PropertiesService.getScriptProperties().getProperty('SITE_SERVICE_TOKEN');
+  const access = siteAccess_(PropertiesService.getScriptProperties());
   if (access) recordRun_(access, {created:0,updated:0,unchanged:0,failed:0,failures:[]});
   console.log('拾讯自动同步已停用；其他脚本与触发器保持不变。');
 }

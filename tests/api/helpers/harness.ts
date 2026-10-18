@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createApiHandler } from '#api';
-import type { ApiEnv } from '#api';
+import type { AccessVerifier, ApiEnv } from '#api';
 import type { Report } from '#shared';
 import { createTestD1 } from './d1.ts';
 
@@ -14,11 +14,12 @@ export interface HarnessOptions {
   withSeeds?: boolean;
   /** 固定或可推进的时钟；默认真实时间。 */
   now?: () => Date;
+  accessVerifier?: AccessVerifier;
 }
 
-export function createHarness(env: Partial<ApiEnv> = {}, { withSeeds = true, now }: HarnessOptions = {}) {
+export function createHarness(env: Partial<ApiEnv> = {}, { withSeeds = true, now, accessVerifier }: HarnessOptions = {}) {
   const DB = createTestD1();
-  const handle = createApiHandler({ seedReports: withSeeds ? seeds : [], now });
+  const handle = createApiHandler({ seedReports: withSeeds ? seeds : [], now, accessVerifier });
   const fullEnv: ApiEnv = { DB, ...env };
   return {
     DB,

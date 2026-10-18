@@ -5,7 +5,9 @@ Google Apps Script 每 15 分钟扫描指定 Google Drive 文件夹，仅发送�
 ## 一次性安装
 1. 在拥有源文件夹读取权的 Google 账号中创建独立 Apps Script 项目。
 2. 将 `Code.gs` 的内容粘贴到默认脚本文件。在项目设置勾选“在编辑器中显示 appsscript.json 清单文件”，再将本包的 `appsscript.json` 内容粘贴到清单。
-3. 在项目设置 → 脚本属性中配置 `SITE_SERVICE_TOKEN`，值在拾讯站点「数据与同步」中点击“复制站点连接凭证”获取。凭证只保存在脚本属性，不写进脚本正文或执行日志。
+3. 在项目设置 → 脚本属性中配置站点凭证。凭证只保存在脚本属性，不写进脚本正文或执行日志。
+   - **部署在 Cloudflare（Access 保护）**：在 Cloudflare Zero Trust → Access → Service Auth 创建服务令牌，把 Client ID、Client Secret 分别存为 `CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`；再把站点地址（如 `https://shixun.<子域>.workers.dev`）存为 `SITE_URL`。
+   - **部署在 Sites**：配置 `SITE_SERVICE_TOKEN`，值在拾讯站点「数据与同步」中点击“复制站点连接凭证”获取。
 4. 手动运行 `installSync`，在 Google 授权页核对只读 Drive、向外部服务发出请求及管理本项目触发器的权限。需要所有者本人完成授权。
 5. 确认执行日志 `installed: true`，站点同步面板出现 Google Apps Script 的成功回读记录，再视为自动同步已启用。
 

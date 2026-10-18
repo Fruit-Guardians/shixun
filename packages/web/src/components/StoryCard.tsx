@@ -1,12 +1,12 @@
 import { ArrowRight, Bookmark } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { CATEGORIES } from '#shared';
-import type { Category, Story } from '#shared';
+import type { Category, StorySummary } from '#shared';
 import { tagCode, topicLabel } from '../lib/labels.ts';
 import Highlight from './Highlight.tsx';
 
 interface StoryCardProps {
-  story: Story;
+  story: StorySummary;
   position: number;
   lead: boolean;
   query: string;

@@ -1,7 +1,7 @@
 import { ChevronDown, LayoutGrid, List, RefreshCw, X } from 'lucide-react';
 import type { RefObject } from 'react';
 import { CATEGORIES } from '#shared';
-import type { Category, Report } from '#shared';
+import type { Category, ReportSummary } from '#shared';
 import { topicLabel } from '../lib/labels.ts';
 import type { Density } from '../lib/preferences.ts';
 
@@ -70,7 +70,7 @@ interface FilterRowProps {
   counts?: Record<Category, number>;
   onCategory: (category: Category) => void;
   /** 传入时显示「选择日报」下拉。 */
-  editions?: { reports: Report[]; activeId: string; onChange: (id: string) => void };
+  editions?: { reports: ReportSummary[]; activeId: string; onChange: (id: string) => void };
 }
 
 export function FilterRow({ category, counts, onCategory, editions }: FilterRowProps) {

@@ -1,10 +1,10 @@
 import { ArrowRight } from 'lucide-react';
-import type { Report } from '#shared';
+import type { ReportSummary } from '#shared';
 import { topicEyebrow } from '../lib/labels.ts';
 import { formatCount } from '../lib/format.ts';
 
 interface ArchiveListProps {
-  reports: Report[];
+  reports: ReportSummary[];
   storyCounts: ReadonlyMap<string, number>;
   onOpen: (id: string) => void;
 }
@@ -25,7 +25,7 @@ export default function ArchiveList({ reports, storyCounts, onOpen }: ArchiveLis
             </span>
             <h2>{report.title}</h2>
             <span className="archive-meta">
-              {storyCounts.get(report.id) ?? 0} stories · {formatCount(report.raw.length)} chars · {report.source}
+              {storyCounts.get(report.id) ?? 0} stories · {formatCount(report.chars)} chars · {report.source}
             </span>
           </div>
           <ArrowRight size={20} />

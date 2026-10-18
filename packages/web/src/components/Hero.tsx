@@ -1,11 +1,11 @@
 import { CornerDownLeft } from 'lucide-react';
-import type { Report, SyncState } from '#shared';
+import type { ReportSummary, SyncState } from '#shared';
 import { SYNC_LABELS } from '../lib/labels.ts';
 import { monthDay } from '../lib/format.ts';
 import ScrambleText from './ScrambleText.tsx';
 
 interface HeroProps {
-  report: Report | undefined;
+  report: ReportSummary | undefined;
   hasDrive: boolean;
   storyCount: number;
   linkCount: number;

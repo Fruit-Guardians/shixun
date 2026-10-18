@@ -1,37 +1,42 @@
-import { CATEGORIES, storiesFor } from '#shared';
-import type { Category, Report, Story } from '#shared';
+import { CATEGORIES, storyMatches } from '#shared';
+import type { Category, ReportSummary, StorySummary } from '#shared';
 import type { BrowseState } from '../state/browse.ts';
 
-export function storiesOf(reports: readonly Report[]): Story[] {
-  return reports.flatMap((report) => storiesFor(report));
+export function storiesOf(reports: readonly ReportSummary[]): StorySummary[] {
+  return reports.flatMap((report) => report.stories);
 }
 
-export function matchesCategory(story: Story, category: Category): boolean {
+export function matchesCategory(story: StorySummary, category: Category): boolean {
   return category === '全部' || story.tags.includes(category);
 }
 
-export function matchesQuery(story: Story, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  return !needle || `${story.title} ${story.body}`.toLowerCase().includes(needle);
+/** 本地匹配：只看标题与摘要。全文搜索由服务端完成，本地匹配用于等待结果或服务端不可用时。 */
+export function matchesQuery(story: StorySummary, query: string): boolean {
+  return !query.trim() || storyMatches(`${story.title} ${story.summary}`, query);
 }
 
 export interface BrowseModel {
-  stories: Story[];
-  activeReport: Report | undefined;
+  stories: StorySummary[];
+  activeReport: ReportSummary | undefined;
   /** 当前范围内、尚未按领域与关键词过滤的动态。 */
-  scoped: Story[];
-  filtered: Story[];
+  scoped: StorySummary[];
+  filtered: StorySummary[];
   counts: Record<Category, number>;
   storyCounts: ReadonlyMap<string, number>;
 }
 
 /**
  * 当前视图能看到哪些动态：
- * - 有搜索词时搜索全部日报；
+ * - 有搜索词时搜索全部日报：有服务端全文结果（searchHits）就以它为准，否则退回本地标题 + 摘要匹配；
  * - 「稍后阅读」只看已收藏；
  * - 其余只看当前选中的这一期。
  */
-export function deriveBrowse(reports: readonly Report[], state: BrowseState, saved: ReadonlySet<string>): BrowseModel {
+export function deriveBrowse(
+  reports: readonly ReportSummary[],
+  state: BrowseState,
+  saved: ReadonlySet<string>,
+  searchHits: ReadonlySet<string> | null = null,
+): BrowseModel {
   const stories = storiesOf(reports);
   const activeReport = reports.find((r) => r.id === state.edition) ?? reports[0];
   const searching = state.query.trim() !== '';
@@ -42,12 +47,12 @@ export function deriveBrowse(reports: readonly Report[], state: BrowseState, sav
       ? stories.filter((s) => saved.has(s.id))
       : stories.filter((s) => s.reportId === activeReport?.id);
 
-  const filtered = scoped.filter((s) => matchesCategory(s, state.category) && matchesQuery(s, state.query));
+  const matches = (s: StorySummary) => !searching || (searchHits ? searchHits.has(s.id) : matchesQuery(s, state.query));
+  const filtered = scoped.filter((s) => matchesCategory(s, state.category) && matches(s));
 
   const counts = Object.fromEntries(CATEGORIES.map((c) => [c, scoped.filter((s) => matchesCategory(s, c)).length])) as Record<Category, number>;
 
-  const storyCounts = new Map<string, number>();
-  for (const s of stories) storyCounts.set(s.reportId, (storyCounts.get(s.reportId) ?? 0) + 1);
+  const storyCounts = new Map(reports.map((r) => [r.id, r.stories.length]));
 
   return { stories, activeReport, scoped, filtered, counts, storyCounts };
 }

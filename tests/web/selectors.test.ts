@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import type { Report } from '#shared';
+import { reportSummary, type Report } from '#shared';
 import { deriveBrowse, matchesQuery, splitHighlight } from '#web/lib/selectors.ts';
 import { browseReducer, initialBrowse } from '#web/state/browse.ts';
 import { archiveReducer, initialArchive } from '#web/state/archive.ts';
@@ -9,7 +9,8 @@ import { monthDay, readMinutes, tocLabel } from '#web/lib/format.ts';
 import { fileProblem, guessMetadata } from '#web/lib/import-file.ts';
 import { parseReportId, reportHash } from '#web/lib/route.ts';
 
-const seeds: Report[] = JSON.parse(fs.readFileSync(new URL('../../data/seed-reports.json', import.meta.url), 'utf8'));
+const rawSeeds: Report[] = JSON.parse(fs.readFileSync(new URL('../../data/seed-reports.json', import.meta.url), 'utf8'));
+const seeds = rawSeeds.map((r) => reportSummary(r));
 const none = new Set<string>();
 
 test('default view shows only the active edition and counts follow the scope', () => {
@@ -34,6 +35,23 @@ test('searching spans every edition and ignores the saved/edition scope', () => 
   assert.ok(model.filtered.length >= 1);
   assert.ok(model.filtered.every((s) => matchesQuery(s, word)));
   assert.equal(model.scoped.length, all.length);
+});
+
+test('full-text hits from the server replace local title/summary matching', () => {
+  const all = deriveBrowse(seeds, initialBrowse(seeds[0].id), none).stories;
+  const hit = all[2].id;
+  const query = 'zz-no-local-match-zz';
+  assert.equal(deriveBrowse(seeds, { ...initialBrowse(seeds[0].id), query }, none).filtered.length, 0);
+  const model = deriveBrowse(seeds, { ...initialBrowse(seeds[0].id), query }, none, new Set([hit]));
+  assert.deepEqual(model.filtered.map((s) => s.id), [hit]);
+});
+
+test('list summaries carry no raw text or story bodies', () => {
+  for (const report of seeds) {
+    assert.ok(!('raw' in report));
+    assert.ok(report.chars > 0 && report.stories.length > 0);
+    assert.ok(report.stories.every((s) => !('body' in s)));
+  }
 });
 
 test('saved view lists only saved stories', () => {
@@ -92,8 +110,8 @@ test('archive reducer tracks loading, refresh and failures', () => {
 test('format helpers', () => {
   assert.deepEqual(monthDay('2026-10-16'), ['10', '16']);
   assert.deepEqual(monthDay(undefined), ['—', '—']);
-  assert.equal(readMinutes('x'), 1);
-  assert.equal(readMinutes('x'.repeat(4500)), 10);
+  assert.equal(readMinutes(1), 1);
+  assert.equal(readMinutes(4500), 10);
   assert.equal(tocLabel('① 昨日重要动态'), '昨日重要动态');
 });
 

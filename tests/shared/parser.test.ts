@@ -80,3 +80,19 @@ test('sync run receipts default missing counts and drop unparseable timestamps',
 test('countLinks counts raw URLs', () => {
   assert.equal(countLinks('a https://x.com/1 b http://y.org'), 2);
 });
+
+test('digest and summary derive counts and drop raw text and bodies', async () => {
+  const { digestFor, reportSummary, storyMatches } = await import('#shared');
+  const report = seeds[0];
+  const digest = digestFor(report);
+  assert.equal(digest.chars, report.raw.length);
+  assert.equal(digest.links, countLinks(report.raw));
+  assert.deepEqual(digest.stories, storiesFor(report));
+  const summary = reportSummary(report, digest);
+  assert.ok(!('raw' in summary));
+  assert.equal(summary.stories.length, digest.stories.length);
+  assert.ok(summary.stories.every((s) => !('body' in s)));
+  assert.equal(summary.title, report.title);
+  assert.ok(storyMatches('Hello 漏洞', '  hello '));
+  assert.ok(!storyMatches('abc', 'abd'));
+});

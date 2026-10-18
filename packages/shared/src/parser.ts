@@ -1,5 +1,5 @@
 import { CATEGORIES } from './constants.ts';
-import type { Report, Section, Story } from './types.ts';
+import type { Report, ReportDigest, ReportSummary, Section, Story, StorySummary } from './types.ts';
 
 /** 去掉 Markdown 标记，保留可读文字。 */
 export function plain(text = ''): string {
@@ -95,4 +95,32 @@ export function storiesFor(report: Pick<Report, 'id' | 'raw' | 'date' | 'topic'>
 
 export function countLinks(raw: string): number {
   return (raw.match(/https?:\/\/[^\s]+/g) ?? []).length;
+}
+
+/**
+ * 解析规则版本。改动 storiesFor / tagsFor / countLinks 的输出时加一，
+ * 服务端会据此重建已存储的动态与统计。
+ */
+export const DIGEST_VERSION = 1;
+
+type DigestSource = Pick<Report, 'id' | 'raw' | 'date' | 'topic'>;
+
+export function digestFor(report: DigestSource): ReportDigest {
+  return { chars: report.raw.length, links: countLinks(report.raw), stories: storiesFor(report) };
+}
+
+export function storySummary(story: Story): StorySummary {
+  const { body, ...summary } = story;
+  return summary;
+}
+
+/** 完整日报 → 列表条目（去掉原文与动态正文）。 */
+export function reportSummary(report: Report, digest: ReportDigest = digestFor(report)): ReportSummary {
+  const { raw, ...meta } = report;
+  return { ...meta, chars: digest.chars, links: digest.links, stories: digest.stories.map(storySummary) };
+}
+
+/** 搜索匹配规则（前后端一致）：不区分大小写的字面子串。 */
+export function storyMatches(text: string, needle: string): boolean {
+  return text.toLowerCase().includes(needle.trim().toLowerCase());
 }

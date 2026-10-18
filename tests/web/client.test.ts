@@ -52,3 +52,40 @@ test('importReport posts JSON and setupCredential unwraps the token', async () =
   assert.equal(await api.setupCredential(), 't');
   assert.equal(api.reportUrl('a b'), 'https://api.example/api/reports/a%20b');
 });
+
+test('getReportText returns the Markdown body and forwards the abort signal', async () => {
+  let seen: { url: string; init?: RequestInit } | undefined;
+  const api = createApiClient({
+    fetcher: async (url, init) => {
+      seen = { url, init };
+      return new Response('# 原文', { headers: { 'content-type': 'text/markdown' } });
+    },
+  });
+  const controller = new AbortController();
+  assert.equal(await api.getReportText('a b', controller.signal), '# 原文');
+  assert.equal(seen?.url, '/api/reports/a%20b');
+  assert.equal(seen?.init?.signal, controller.signal);
+  const missing = createApiClient({ fetcher: reply({ error: '没有找到这期日报。' }, 404) });
+  await assert.rejects(missing.getReportText('x'), (e: ApiError) => e.status === 404 && e.message === '没有找到这期日报。');
+});
+
+test('search encodes the query and validates the payload', async () => {
+  let url = '';
+  const api = createApiClient({
+    fetcher: async (u) => {
+      url = u;
+      return new Response(JSON.stringify({ query: 'a&b 漏洞', storyIds: ['r--0'] }));
+    },
+  });
+  assert.deepEqual((await api.search('a&b 漏洞')).storyIds, ['r--0']);
+  assert.equal(new URL(url, 'https://x').searchParams.get('q'), 'a&b 漏洞');
+  const bad = createApiClient({ fetcher: reply({ query: 'x' }) });
+  await assert.rejects(bad.search('x'), (e: ApiError) => e.code === 'bad_response');
+});
+
+test('aborted requests rethrow the abort instead of a network ApiError', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const api = createApiClient({ fetcher: async () => { throw new DOMException('aborted', 'AbortError'); } });
+  await assert.rejects(api.search('x', controller.signal), (e: Error) => e.name === 'AbortError');
+});

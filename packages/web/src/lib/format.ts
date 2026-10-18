@@ -4,8 +4,8 @@ export function formatCount(n: number): string {
 }
 
 /** 约 450 字符 / 分钟，至少 1 分钟。 */
-export function readMinutes(raw: string): number {
-  return Math.max(1, Math.round(raw.length / 450));
+export function readMinutes(chars: number): number {
+  return Math.max(1, Math.round(chars / 450));
 }
 
 /** `2026-10-16` → `['10', '16']`；无日期时返回占位符。 */

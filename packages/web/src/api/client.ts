@@ -1,5 +1,5 @@
 import { apiPaths } from '#shared';
-import type { ApiErrorBody, ImportRequest, IngestResult, ReportsResponse, SetupCredentialResponse } from '#shared';
+import type { ApiErrorBody, ImportRequest, IngestResult, ReportsResponse, SearchResponse, SetupCredentialResponse } from '#shared';
 
 /** 后端返回的错误，或网络层失败（status = 0）。 message 可直接展示给用户。 */
 export class ApiError extends Error {
@@ -26,19 +26,25 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
   const baseUrl = options.baseUrl ?? '';
   const fetcher = options.fetcher ?? defaultFetcher;
 
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  /** 发请求；非 2xx 统一转成 ApiError（优先使用服务端给出的 JSON 错误信息）。 */
+  async function send(path: string, init: RequestInit = {}): Promise<Response> {
     let response: Response;
     try {
       response = await fetcher(baseUrl + path, { cache: 'no-store', credentials: 'same-origin', ...init });
-    } catch {
+    } catch (error) {
+      if (init.signal?.aborted) throw error;
       throw new ApiError('网络连接失败，请检查网络后重试。', 0, 'network');
     }
-    const body: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const failure = (body ?? {}) as Partial<ApiErrorBody>;
+      const failure = ((await response.json().catch(() => null)) ?? {}) as Partial<ApiErrorBody>;
       throw new ApiError(failure.error ?? `请求失败（${response.status}）。`, response.status, failure.code);
     }
-    return body as T;
+    return response;
+  }
+
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await send(path, init);
+    return (await response.json().catch(() => null)) as T;
   }
 
   const postJson = (path: string, payload: unknown): Promise<unknown> =>
@@ -46,9 +52,20 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
 
   return {
     async listReports(): Promise<ReportsResponse> {
-      const data = await request<Partial<ReportsResponse>>(apiPaths.reports);
-      if (!Array.isArray(data.reports)) throw new ApiError('归档返回格式异常。', 200, 'bad_response');
+      const data = await request<Partial<ReportsResponse> | null>(apiPaths.reports);
+      if (!data || !Array.isArray(data.reports)) throw new ApiError('归档返回格式异常。', 200, 'bad_response');
       return data as ReportsResponse;
+    },
+    /** 某一期的 Markdown 原文（列表里不含原文，阅读时按需读取）。 */
+    async getReportText(id: string, signal?: AbortSignal): Promise<string> {
+      const response = await send(apiPaths.report(id), { signal });
+      return response.text();
+    },
+    /** 在全部动态的标题与正文里搜索，返回命中的动态 id。 */
+    async search(query: string, signal?: AbortSignal): Promise<SearchResponse> {
+      const data = await request<Partial<SearchResponse>>(`${apiPaths.search}?${new URLSearchParams({ q: query })}`, { signal });
+      if (!data || !Array.isArray(data.storyIds)) throw new ApiError('搜索返回格式异常。', 200, 'bad_response');
+      return data as SearchResponse;
     },
     async importReport(input: ImportRequest): Promise<IngestResult> {
       return (await postJson(apiPaths.reports, input)) as IngestResult;

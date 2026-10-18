@@ -1,7 +1,6 @@
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import type { RefObject } from 'react';
-import { countLinks } from '#shared';
-import type { Category, Report, SyncState } from '#shared';
+import type { Category, ReportSummary, SyncState } from '#shared';
 import type { Density } from '../lib/preferences.ts';
 import type { BrowseModel } from '../lib/selectors.ts';
 import type { BrowseState } from '../state/browse.ts';
@@ -15,10 +14,12 @@ import { FilterRow, Toolbar } from './Toolbar.tsx';
 interface BrowseViewProps {
   browse: BrowseState;
   model: BrowseModel;
-  reports: Report[];
+  reports: ReportSummary[];
   sync: SyncState | null;
   hasDriveImports: boolean;
   error: string | null;
+  /** 全文搜索失败、退回到只匹配标题与摘要。 */
+  searchDegraded: boolean;
   refreshing: boolean;
   density: Density;
   saved: ReadonlySet<string>;
@@ -51,7 +52,7 @@ export default function BrowseView(props: BrowseViewProps) {
           report={activeReport}
           hasDrive={hasDriveImports}
           storyCount={activeReport ? (model.storyCounts.get(activeReport.id) ?? 0) : 0}
-          linkCount={activeReport ? countLinks(activeReport.raw) : 0}
+          linkCount={activeReport?.links ?? 0}
           sync={sync}
           onRead={() => activeReport && props.onOpenReport(activeReport.id)}
           onOpenSync={props.onOpenSync}
@@ -102,6 +103,12 @@ export default function BrowseView(props: BrowseViewProps) {
           />
         )}
       </div>
+
+      {searching && props.searchDegraded && (
+        <div className="error-banner" role="status">
+          <span>全文搜索暂时不可用，当前只匹配标题与摘要。</span>
+        </div>
+      )}
 
       {props.error && (
         <div className="error-banner" role="alert">

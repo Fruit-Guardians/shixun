@@ -13,6 +13,18 @@ function subscribe(listener: () => void): () => void {
 }
 
 const getSnapshot = () => parseReportId(location.hash);
+
+/** 阅读页的原文是异步读取的：等条目渲染出来再滚动，最多等 STORY_SCROLL_TIMEOUT_MS。 */
+const STORY_SCROLL_TIMEOUT_MS = 5_000;
+function scrollToStoryWhenReady(storyIndex: number): void {
+  const deadline = performance.now() + STORY_SCROLL_TIMEOUT_MS;
+  const tick = () => {
+    const target = document.getElementById(`story-${storyIndex}`);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else if (performance.now() < deadline) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 const getServerSnapshot = () => '';
 
 /** 当前正在阅读的日报 id（空串表示列表页），以及打开 / 关闭 / 生成分享链接。 */
@@ -21,14 +33,8 @@ export function useReportRoute() {
 
   const open = useCallback((id: string, storyIndex?: number) => {
     location.hash = reportHash(id);
-    requestAnimationFrame(() => {
-      if (storyIndex === undefined) {
-        scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      // 等阅读页渲染出来再滚动到对应条目。
-      setTimeout(() => document.getElementById(`story-${storyIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    });
+    if (storyIndex === undefined) requestAnimationFrame(() => scrollTo({ top: 0, behavior: 'smooth' }));
+    else scrollToStoryWhenReady(storyIndex);
   }, []);
 
   const close = useCallback(() => {

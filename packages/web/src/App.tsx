@@ -16,7 +16,9 @@ import Topbar from './components/Topbar.tsx';
 import { useArchive } from './hooks/useArchive.ts';
 import { useLocalStore } from './hooks/useLocalStore.ts';
 import { useReportRoute } from './hooks/useReportRoute.ts';
+import { useReportText } from './hooks/useReportText.ts';
 import { useShowBackToTop } from './hooks/useScroll.ts';
+import { useSearch } from './hooks/useSearch.ts';
 import { useShortcuts } from './hooks/useShortcuts.ts';
 import { usePalette, useTheme } from './hooks/useTheme.ts';
 import { useToast } from './hooks/useToast.ts';
@@ -55,8 +57,13 @@ export default function App({ initial, api = defaultApi }: AppProps) {
   const showBackToTop = useShowBackToTop();
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const model = useMemo(() => deriveBrowse(archive.reports, browse, savedIds), [archive.reports, browse, savedIds]);
+  const fullText = useSearch(api, browse.query);
+  const model = useMemo(
+    () => deriveBrowse(archive.reports, browse, savedIds, fullText.hits),
+    [archive.reports, browse, savedIds, fullText.hits],
+  );
   const reading = archive.reports.find((r) => r.id === reportId);
+  const readingText = useReportText(api, reading);
 
   // 地址栏颜色跟随配色与明暗。
   useEffect(syncThemeColor, [theme, palette]);
@@ -191,7 +198,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
         {mobileNav && <button className="nav-scrim" aria-label="关闭分类导航" onClick={() => setMobileNav(false)} />}
         <main className="main-content" id="main">
           {reading ? (
-            <ReaderView report={reading} downloadUrl={api.reportUrl(reading.id)} onBack={() => navigate('today')} onCopyLink={copyLink} />
+            <ReaderView report={reading} text={readingText} downloadUrl={api.reportUrl(reading.id)} onBack={() => navigate('today')} onCopyLink={copyLink} />
           ) : archive.status === 'loading' ? (
             <LoadingState />
           ) : (
@@ -202,6 +209,7 @@ export default function App({ initial, api = defaultApi }: AppProps) {
               sync={archive.sync}
               hasDriveImports={archive.hasDriveImports}
               error={archive.error}
+              searchDegraded={fullText.failed}
               refreshing={archive.refreshing}
               density={density}
               saved={savedIds}

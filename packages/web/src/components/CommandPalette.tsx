@@ -5,7 +5,7 @@ import { CornerDownLeft } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { CATEGORIES } from '#shared';
-import type { Category, Report } from '#shared';
+import type { Category, ReportSummary } from '#shared';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { searchTerm } from '../lib/command.ts';
 import { CATEGORY_LABELS, tagCode, topicLabel } from '../lib/labels.ts';
@@ -16,7 +16,7 @@ import type { View } from '../state/browse.ts';
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reports: Report[];
+  reports: ReportSummary[];
   theme: Theme;
   palette: Palette;
   onNavigate: (view: View) => void;

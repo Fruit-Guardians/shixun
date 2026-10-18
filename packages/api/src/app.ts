@@ -5,6 +5,7 @@ import { Router } from './router.ts';
 import { setupCredentialRoute } from './routes/credential.ts';
 import { healthRoute } from './routes/health.ts';
 import { downloadReportRoute, importReportRoute, listReportsRoute } from './routes/reports.ts';
+import { searchRoute } from './routes/search.ts';
 import { ingestSyncRoute, readSyncStatusRoute, recordSyncStatusRoute } from './routes/sync.ts';
 
 export function buildRouter(): Router {
@@ -13,6 +14,7 @@ export function buildRouter(): Router {
     .get(apiPaths.reports, listReportsRoute)
     .post(apiPaths.reports, importReportRoute)
     .get('/api/reports/:id', downloadReportRoute)
+    .get(apiPaths.search, searchRoute)
     .post(apiPaths.sync, ingestSyncRoute)
     .get(apiPaths.syncStatus, readSyncStatusRoute)
     .post(apiPaths.syncStatus, recordSyncStatusRoute)

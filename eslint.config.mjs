@@ -61,6 +61,13 @@ const eslintConfig = defineConfig([
     [["drizzle-orm", "drizzle-orm/*"], "前端不接触数据库。"],
   ]),
   {
+    files: ["packages/**/*.{ts,tsx}", "tests/**/*.ts"],
+    rules: {
+      // `const { raw, ...rest } = report` 是去掉字段的惯用写法，被丢弃的字段不算未使用。
+      "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+    },
+  },
+  {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {
       // These files are vendored verbatim from shadcn@4.17.0. Keep the

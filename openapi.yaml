@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 2.2.0
+  version: 3.0.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -22,7 +22,10 @@ paths:
               schema: {$ref: '#/components/schemas/Health'}
   /api/reports:
     get:
-      summary: Read archived reports (seeds merged with stored reports, newest first)
+      summary: List archived reports (seeds merged with stored reports, newest first)
+      description: |
+        Since 3.0.0 the list carries metadata and per-story summaries only: no `raw` Markdown and no story
+        `body`. Fetch the full text with `GET /api/reports/{id}` and search bodies with `GET /api/search`.
       responses:
         '200':
           description: Reports, Drive import status and the actual program-sync heartbeat
@@ -65,6 +68,22 @@ paths:
           content:
             text/markdown: {schema: {type: string}}
         '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/search:
+    get:
+      summary: Search every story's title and body
+      description: |
+        Case-insensitive literal substring match (no tokenisation, `%` and `_` are not wildcards) across all
+        visible reports, seeds included. A blank query returns no ids.
+      parameters:
+        - {in: query, name: q, required: true, schema: {type: string, maxLength: 100}}
+      responses:
+        '200':
+          description: Ids of matching stories (no ranking; the client orders them with the list)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /api/sync:
     post:
@@ -193,9 +212,25 @@ components:
         status: {type: string, enum: [created, updated, unchanged]}
         hash: {type: string, description: SHA-256 hex of raw}
         revision: {type: integer, minimum: 1}
-    Report:
+    Tag:
+      type: string
+      description: Category label assigned by the shared parser
+    StorySummary:
       type: object
-      required: [id, date, title, topic, source, sourceFileId, raw, importedAt]
+      required: [id, reportId, index, date, topic, title, summary, tags]
+      properties:
+        id: {type: string, description: '`${reportId}--${index}`'}
+        reportId: {type: string}
+        index: {type: integer, minimum: 0}
+        date: {type: string, format: date}
+        topic: {$ref: '#/components/schemas/Topic'}
+        title: {type: string}
+        summary: {type: string}
+        tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
+    ReportSummary:
+      description: A report without its raw Markdown, plus derived counts and story summaries
+      type: object
+      required: [id, date, title, topic, source, sourceFileId, importedAt, chars, links, stories]
       properties:
         id: {type: string}
         date: {type: string, format: date}
@@ -203,9 +238,17 @@ components:
         topic: {$ref: '#/components/schemas/Topic'}
         source: {type: string}
         sourceFileId: {type: [string, 'null']}
-        raw: {type: string}
         importedAt: {type: [string, 'null'], format: date-time}
         revision: {type: integer}
+        chars: {type: integer, minimum: 0, description: Length of the raw Markdown in UTF-16 code units}
+        links: {type: integer, minimum: 0}
+        stories: {type: array, items: {$ref: '#/components/schemas/StorySummary'}}
+    SearchResponse:
+      type: object
+      required: [query, storyIds]
+      properties:
+        query: {type: string, description: The trimmed query that was matched}
+        storyIds: {type: array, items: {type: string}}
     SyncRunInput:
       type: object
       required: [triggerInstalled]
@@ -233,7 +276,7 @@ components:
       type: object
       required: [reports, sync, drive]
       properties:
-        reports: {type: array, items: {$ref: '#/components/schemas/Report'}}
+        reports: {type: array, items: {$ref: '#/components/schemas/ReportSummary'}}
         sync: {$ref: '#/components/schemas/SyncState'}
         drive:
           type: object

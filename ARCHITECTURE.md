@@ -29,7 +29,7 @@ shared ◀── api        api 不得引用 #web / React / Next / cloudflare:wo
 
 ## 后端分层
 ```
-routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, sync.ts, credential.ts, health.ts）
+routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, search.ts, sync.ts, credential.ts, health.ts）
                service-errors.ts：ValidationError→400、回读不一致→503、其它→记录日志 + 503
 services/      业务：导入去重、版本历史、归档合并与排序、同步状态   （不知道 HTTP）
 repositories/  SQL：只有这一层写 SQL；列名显式列出   （不知道业务规则）
@@ -45,6 +45,17 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 - 写入新版本时，旧版本在库内用 `INSERT … SELECT` 复制进 `report_versions`，全文不经过 Worker。
 - `sync_runs` 每 15 分钟一行，最新回执走 `sync_runs_received_at_idx` 索引。
 
+列表与全文分离：
+- `GET /api/reports` 只返回元数据（`ReportSummary`：字数 `chars`、链接数 `links`）和每期的条目摘要（标题、摘要、标签），不含原文 `raw` 和条目正文 `body`。阅读页按需请求 `GET /api/reports/{id}` 取原文。
+- 条目在导入时由 `digestFor` 解析一次，写进 `report_stories`（与 `reports` 的写入同一个 batch）；`reports` 上记 `char_count`、`link_count`、`digest_version`。
+- 解析规则变了就把 `#shared` 的 `DIGEST_VERSION` 加一。读列表时版本落后的报告会从原文重算：每个请求最多回写 `DIGEST_HEAL_LIMIT`（20）期，其余本次在内存里算，下次请求继续回写，不需要单独的迁移脚本。
+- 种子随代码发布，派生数据在进程内按种子数组缓存一次。
+
+搜索：
+- `GET /api/search?q=` 在全部条目的标题与正文里做不区分大小写的字面子串匹配（`instr(lower(...))`，中文无需分词，`%`/`_` 不是通配符），返回命中的条目 id；`q` 最长 `MAX_SEARCH_CHARS`（100）字符。
+- 种子和尚未回写的报告在内存里用同一个 `storyMatches` 匹配；被数据库记录取代的种子不参与。
+- 前端输入防抖 200 ms、新请求取消旧请求；搜索失败时退回本地的标题 + 摘要匹配并提示。
+
 ### 信任边界
 身份全部来自 Sites 入口，API 不再二次校验：
 - `oai-authenticated-user-*`：入口在登录后注入，并负责剥离客户端伪造的同名头。
@@ -56,7 +67,7 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 api/client.ts      唯一的 HTTP 出口；ApiError；可注入 fetcher 与 baseUrl
 state/             纯 reducer：浏览状态（视图/筛选/搜索/期数）、归档加载状态
 lib/               纯函数：markdown 解析、选择器（过滤/统计/高亮）、格式化、本机存储
-hooks/             把外部状态接进 React：路由（hash）、主题、收藏、滚动、提示
+hooks/             把外部状态接进 React：路由（hash）、主题、收藏、滚动、提示、全文搜索（useSearch）、原文按需加载（useReportText，按 id+revision+importedAt 缓存）
 components/        只负责展示；业务状态都从 props 来
 App.tsx            组合以上各层
 ```

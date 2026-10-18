@@ -1,4 +1,4 @@
-import type { Report, ReportsResponse, SyncState } from '#shared';
+import type { ReportSummary, ReportsResponse, SyncState } from '#shared';
 
 /** 宿主在服务端预取的归档；缺省时前端挂载后自行请求。 */
 export interface InitialArchive {
@@ -8,7 +8,7 @@ export interface InitialArchive {
 
 export interface ArchiveState {
   status: 'loading' | 'ready';
-  reports: Report[];
+  reports: ReportSummary[];
   sync: SyncState | null;
   hasDriveImports: boolean;
   error: string | null;

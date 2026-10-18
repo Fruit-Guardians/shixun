@@ -17,6 +17,9 @@ export const MAX_SYNC_COUNT = 10_000;
 /** 超过该时长没有收到 Google 脚本回执，同步状态记为「延迟」。 */
 export const SYNC_STALE_MS = 60 * 60 * 1000;
 
+/** 搜索词的字符上限。 */
+export const MAX_SEARCH_CHARS = 100;
+
 /** Google Apps Script 同步协议标识（仅标识协议，不是认证）。 */
 export const SYNC_PROTOCOL_HEADER = 'x-sites-report-sync';
 export const SYNC_PROTOCOL_CURRENT = 'google-apps-script';
@@ -32,6 +35,7 @@ export const apiPaths = {
   health: '/api/health',
   reports: '/api/reports',
   report: (id: string) => `/api/reports/${encodeURIComponent(id)}`,
+  search: '/api/search',
   sync: '/api/sync',
   syncStatus: '/api/sync/status',
   setupCredential: '/api/integration/setup-credential',

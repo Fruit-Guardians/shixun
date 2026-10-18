@@ -28,6 +28,25 @@ export interface Story {
   topic: ReportTopic;
 }
 
+/** 列表里的一条动态：不含正文，正文只在服务端用于搜索。 */
+export type StorySummary = Omit<Story, 'body'>;
+
+/** 列表里的一期日报：元数据、统计与动态摘要，不含原文。原文按需从 `apiPaths.report(id)` 读取。 */
+export interface ReportSummary extends Omit<Report, 'raw'> {
+  /** 原文字符数（UTF-16 长度）。 */
+  chars: number;
+  /** 原文里的链接数。 */
+  links: number;
+  stories: StorySummary[];
+}
+
+/** 由原文确定性地派生出的数据（服务端存储，原文变化或解析规则升级时重建）。 */
+export interface ReportDigest {
+  chars: number;
+  links: number;
+  stories: Story[];
+}
+
 /** 日报正文里的一级章节（①②③…）。 */
 export interface Section {
   id: string;
@@ -98,9 +117,15 @@ export interface IngestResult {
 }
 
 export interface ReportsResponse {
-  reports: Report[];
+  reports: ReportSummary[];
   sync: SyncState;
   drive: { status: 'imported' | 'not_connected'; folderId: string };
+}
+
+/** 全文搜索结果：命中的动态 id（覆盖动态正文，不只是标题与摘要）。 */
+export interface SearchResponse {
+  query: string;
+  storyIds: string[];
 }
 
 export interface SetupCredentialResponse {

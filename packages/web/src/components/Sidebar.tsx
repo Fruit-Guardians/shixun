@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { CATEGORIES } from '#shared';
-import type { Category, Report, SyncState } from '#shared';
+import type { Category, ReportSummary, SyncState } from '#shared';
 import { CATEGORY_LABELS, SYNC_LABELS, topicLabel } from '../lib/labels.ts';
 import type { View } from '../state/browse.ts';
 
@@ -12,7 +12,7 @@ interface SidebarProps {
   savedCount: number;
   category: Category;
   counts: Record<Category, number>;
-  recent: Report[];
+  recent: ReportSummary[];
   edition: string;
   sync: SyncState | null;
   onNavigate: (view: View) => void;

@@ -1,0 +1,48 @@
+openapi: 3.1.0
+info:
+  title: 拾讯日报归档 API
+  version: 1.0.0
+paths:
+  /api/reports:
+    get:
+      summary: Read archived reports behind private Site access
+      responses:
+        '200': {description: Reports and import status}
+        '503': {description: Storage temporarily unavailable}
+    post:
+      summary: Import Markdown as a signed-in visitor
+      responses:
+        '200': {description: Created, updated, or unchanged with readback verified}
+        '400': {description: Invalid content or date}
+        '401': {description: Sign-in required}
+        '403': {description: Origin mismatch}
+        '413': {description: File too large}
+  /api/sync:
+    post:
+      summary: Drive ingestion, exclusively behind owner-private Sites service access
+      description: Requires OAI-Sites-Authorization at Sites ingress and X-Sites-Report-Sync google-drive. Not a public endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [raw, date, sourceFileId]
+              properties:
+                raw: {type: string, description: Complete unchanged UTF-8 Markdown}
+                date: {type: string, format: date}
+                sourceFileId: {type: string}
+                topic: {type: string, enum: [全球技术社区, 安全专题]}
+      responses:
+        '200': {description: Exact content readback verified, includes id, hash, status, revision}
+        '400': {description: Validation failed}
+        '403': {description: Browser or invalid protocol request rejected}
+        '413': {description: File too large}
+  /api/reports/{id}:
+    get:
+      summary: Download exact original Markdown
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Original Markdown with download headers}
+        '404': {description: Report not found}

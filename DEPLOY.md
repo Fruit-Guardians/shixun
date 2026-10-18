@@ -67,6 +67,7 @@ Access 登录完成后会回到首页；登录有效期由 Access 应用的会�
    - `CF_ACCESS_CLIENT_SECRET` = Client Secret
    - `SITE_URL` = `https://shixun.<你的子域>.workers.dev`（不带结尾斜杠和路径）
 4. 用仓库里新的 `integrations/google-apps-script/Code.gs` 覆盖脚本内容，运行一次 `installSync`。
+5. 让 Grok 按 [REPORT_FORMAT.md](REPORT_FORMAT.md) 命名文件和书写条目，否则日期识别会失败或拆不出卡片。
 
 Worker 只接受**服务令牌**的 JWT 调用 `/api/sync*`：普通登录用户、浏览器请求、只带协议头的请求都会被拒绝。
 
@@ -89,7 +90,7 @@ Workers & Pages → `shixun` → 设置 → 构建（Builds）→ 连接 GitHub 
 
 | 项 | 值 |
 | --- | --- |
-| 根目录 | `site`（如果仓库根就是本目录则留空） |
+| 根目录 | 留空（仓库根就是本目录） |
 | 构建命令 | `npm run build:cloudflare` |
 | 部署命令 | `npm run deploy:cloudflare` |
 

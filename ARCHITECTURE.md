@@ -89,7 +89,7 @@ App.tsx            组合以上各层
 浏览器偏好（主题、布局、收藏）通过 `useSyncExternalStore` 读取 localStorage，服务端渲染与水合一致，存储不可用时退回内存。
 
 ## 为什么仍然是一个 Worker
-站点托管在 Sites 平台或直接部署在 Cloudflare Workers（`npm run build:cloudflare`，配置 `wrangler.cloudflare.jsonc`）：构建产物是单个 Worker（`vinext build`），登录身份由平台入口注入请求头（`oai-authenticated-user-*`），程序同步凭证也在平台入口校验。因此部署形态保持单 Worker，分离发生在代码与契约层。
+站点直接部署在 Cloudflare Workers（`npm run build:cloudflare`，配置 `wrangler.cloudflare.jsonc`），也可以托管在 Sites 平台：构建产物都是单个 Worker（`vinext build`）。身份在 Cloudflare 上由 Access JWT 提供、API 自行验签，在 Sites 上由平台入口注入。两种情况下页面与 API 共用同一个域名，不需要 CORS，所以部署形态保持单 Worker，分离发生在代码与契约层。
 
 如果将来需要独立部署，接缝已经就位：`createApiHandler` 是普通的 Fetch 处理器，可以挂到单独的 Worker；前端把 `createApiClient({ baseUrl })` 指向它即可。需要额外处理的是跨域（CORS）与身份传递，目前**没有实现，也没有做过独立部署的验证**。
 

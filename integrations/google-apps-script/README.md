@@ -11,7 +11,9 @@ Google Apps Script 每 15 分钟扫描指定 Google Drive 文件夹，仅发送�
 4. 手动运行 `installSync`，在 Google 授权页核对只读 Drive、向外部服务发出请求及管理本项目触发器的权限。需要所有者本人完成授权。
 5. 确认执行日志 `installed: true`，站点同步面板出现 Google Apps Script 的成功回读记录，再视为自动同步已启用。
 
-源目录与站点地址已写入非敏感配置，保持站点 owner-private。这个方案使用 Google 账号的只读 Drive 权限，程序只枚举指定目录，不修改源文件。
+源目录与站点地址写在 `Code.gs` 的非敏感配置里；凭证只在脚本属性中。这个方案使用 Google 账号的只读 Drive 权限，程序只枚举指定目录，不修改源文件。
+
+文件命名和正文格式（日期、专题、能拆成卡片的条目写法）见仓库根目录的 `REPORT_FORMAT.md`。
 
 运行 `disableSync` 可以撤销本项目的同步触发器；不会删除日报。
 

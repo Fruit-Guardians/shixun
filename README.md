@@ -1,53 +1,141 @@
-# 拾讯 · 每日技术观察
+<div align="center">
 
-浅色技术日报阅读网站。Grok 生成完整 Markdown 并保存至 Google Drive；本站原样归档，提供动态卡片、分类、跨日报搜索、完整阅读、原文下载和本机稍后阅读。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="public/brand/shixun-logo-dark.svg">
+  <img src="public/brand/shixun-logo-light.svg" alt="拾讯" width="300">
+</picture>
 
-## 已实现
-- 前后端按包分离（见下方「项目结构」与 [ARCHITECTURE.md](ARCHITECTURE.md)）：`shared` 契约、`api` 后端、`web` 前端，包之间的依赖由 ESLint 强制。
-- React / Vinext 页面；统一设计令牌的响应式样式（packages/web/src/styles/ui.css），支持浅色/深色主题（跟随系统，可手动切换并记忆）。
-- 阅读体验：阅读进度条、目录高亮、复制阅读链接、搜索关键词高亮、回到顶部、键盘「跳到主要内容」；弹窗基于 shadcn Dialog（焦点锁定、Esc 关闭）。
-- Cloudflare D1 持久化，SHA-256 内容去重；更新保留旧版本，写入后全文回读。
-- 筛选标签由确定性关键词规则生成，不代表技术结论得到独立核验。
-- 历史原文保留在 data/seed-reports.json，实际 Drive 文本通过后端导入数据库，不固化到源码。
-- `GET /api/reports` 列表；`GET /api/reports/:id` 下载原始 Markdown；`GET /api/health` 健康检查。
-- `POST /api/reports` 登录用户手动导入；`POST /api/sync` 受 Sites owner-private 边界保护的无人值守接收端。
+**每日技术观察 · 从信息中拾取信号**
+
+Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原样归档成一个可搜索、可阅读的网站。
+
+[![在线站点](https://img.shields.io/badge/在线站点-shixun.bx33661.workers.dev-0F7A35?style=flat-square)](https://shixun.bx33661.workers.dev)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)](DEPLOY.md)
+[![React 19](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](packages/web)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A522.13-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.4.0-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)](openapi.yaml)
+
+[在线阅读](https://shixun.bx33661.workers.dev) · [部署](DEPLOY.md) · [架构](ARCHITECTURE.md) · [日报格式](REPORT_FORMAT.md) · [自动同步](integrations/google-apps-script/README.md) · [接口](openapi.yaml)
+
+</div>
+
+---
+
+## 它做什么
+
+```
+ Grok 定时任务 ──▶ Google Drive ──▶ Apps Script（每 15 分钟） ──▶ 拾讯 · Cloudflare Workers + D1 ──▶ 读者
+  生成 Markdown       存放原文         增量投递 + 全文回读            归档 / 解析 / 搜索                公开阅读
+```
+
+- **原样归档**：日报全文按 SHA-256 去重存进 D1。更新时保留旧版本，写入后全文回读核对。
+- **动态卡片**：从「① 昨日重要动态」里拆出每一条，生成标题、摘要和标签。格式见 [REPORT_FORMAT.md](REPORT_FORMAT.md)。
+- **跨日报搜索**：在全部条目的标题和正文中做字面匹配，中文不用分词，命中的关键词会高亮。
+- **阅读体验**：
+  - 阅读进度条、目录高亮、复制阅读链接、回到顶部
+  - 浅色/深色主题
+  - 稍后阅读（保存在本机）
+  - 下载原文和历史版本
+- **零 AI 同步**：同步只是一个普通的 Google Apps Script，不调用任何模型，也不需要电脑开机。
+- **公开阅读，写入受保护**：任何人都能浏览。导入、删除和恢复版本只对所有者开放，由 Cloudflare Access JWT 校验。
+
+> [!NOTE]
+> 标签由确定性关键词规则生成。导入成功只能证明全文传输完整，不代表日报里第三方研究、数字和链接已经核实。
+
+## 快速开始
+
+```sh
+npm install
+npm run dev -- --hostname 127.0.0.1   # 本地开发站
+npm run check                         # 类型检查 + ESLint + 全部测试
+```
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm test` | 只跑测试。用 Node 内置测试运行器，接口测试在加载了真实迁移的内存 D1 上运行 |
+| `npm run smoke` | 对运行中站点的只读冒烟检查，不写入任何数据。查线上用 `SMOKE_BASE_URL=https://… npm run smoke` |
+| `npm run build:cloudflare` | 构建 Cloudflare Workers 产物 |
+| `npm run deploy:cloudflare` | 先执行远程 D1 迁移，再部署 Worker |
+| `npm run db:generate` | 根据 `packages/api/src/schema.ts` 生成 `drizzle/` 迁移 |
+
+需要 Node ≥ 22.13。
+
+## 部署与同步
+
+1. **部署站点**：按 [DEPLOY.md](DEPLOY.md) 部署到 Cloudflare Workers + D1。免费额度就够用，不需要绑卡。
+   - Access 只保护 `/login`（所有者登录）和 `/api/sync`（服务令牌）。
+2. **接上 Google Drive**：按 [integrations/google-apps-script](integrations/google-apps-script/README.md) 安装 Apps Script，运行一次 `installSync`。
+   - 之后每 15 分钟增量同步一次。
+   - 站点「数据与同步」面板会显示每次真实回执。
+3. **让 Grok 按格式写**：文件名和一级标题里都要带同一个 `YYYY-MM-DD` 日期。动态条目用 `1. **标题**` 编号，详见 [REPORT_FORMAT.md](REPORT_FORMAT.md)。
 
 ## 项目结构
+
 ```
 packages/
   shared/   前后端共用的契约：类型、常量、API 路径、日报解析与导入校验（无运行时依赖）
   api/      后端：与框架无关的 Fetch 处理器 (Request, env) → Response
             routes（HTTP）→ services（业务）→ repositories（SQL）；schema.ts 为 drizzle 表定义
-  web/      前端：React 客户端。只通过 src/api/client.ts 以 HTTP 访问后端
+  web/      前端：React 客户端，只通过 src/api/client.ts 以 HTTP 访问后端
 app/        宿主（Vinext / Cloudflare Worker），只做接线：/api/* 转给 api 包，页面渲染 web 包
-components/ui/  vendored shadcn 组件（设计系统，前端可用）
+components/ui/  vendored shadcn 组件
 drizzle/        数据库迁移
 integrations/   Google Apps Script 同步器
+data/           随代码发布的历史日报种子
 tests/          shared / api / web 的单元、接口与组件渲染测试
 ```
-前端不能引用 `#api`，后端不能引用 `#web`、React 或 `cloudflare:workers`，违反时 `npm run lint` 失败。
 
-## 运行
-```sh
-npm run dev -- --hostname 127.0.0.1   # 本地开发
-npm run check                         # 类型检查 + ESLint + 全部测试
-npm test                              # 仅测试（Node 内置测试运行器，无需额外依赖）
-```
-接口测试用 `node:sqlite` 加载真实的 `drizzle/*.sql` 迁移，在内存 D1 上运行，不需要启动站点。对运行中站点的只读冒烟检查：`npm run smoke`（默认本地开发站，`SMOKE_BASE_URL=https://… npm run smoke` 检查线上；不写入任何数据）。
+包之间的依赖由 ESLint 强制：
+- 前端不能引用 `#api`、Next 或 drizzle。
+- 后端不能引用 `#web`、React 或 `cloudflare:workers`。
 
-数据库迁移与构建按 Sites 工作流执行。生产数据库与本地数据库独立。
+分层与信任边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-直接部署到 Cloudflare Workers + D1（公开阅读，写操作由 Cloudflare Access 保护）：见 [DEPLOY.md](DEPLOY.md)。
+## 接口一览
 
-## 自动同步
-源目录：`1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT`。
-完整安装说明在 `integrations/google-apps-script/README.md` 与站点「数据与同步」面板。普通 Google Apps Script 每15分钟扫描一次源目录，增量投递与全文回读；不调用 AI，不依赖个人电脑开机。首次运行 `installSync` 需要所有者完成 Google 授权，文件准备好不代表触发器已安装。停用运行 `disableSync`。
+| 方法 | 路径 | 说明 | 身份 |
+| --- | --- | --- | --- |
+| `GET` | `/api/reports` | 归档列表（元数据 + 条目摘要） | 公开 |
+| `GET` | `/api/reports/{id}` | 下载原始 Markdown | 公开 |
+| `GET` | `/api/reports/{id}/versions` | 版本历史 | 公开 |
+| `GET` | `/api/search?q=` | 跨日报全文搜索 | 公开 |
+| `GET` | `/api/health` | 健康检查 | 公开 |
+| `POST` | `/api/reports` | 手动导入 | 所有者 |
+| `DELETE` | `/api/reports/{id}` | 删除一期（原文留在历史里） | 所有者 |
+| `POST` | `/api/reports/{id}/versions/{versionId}/restore` | 恢复历史版本 | 所有者 |
+| `POST` | `/api/sync` | Apps Script 无人值守投递 | 服务令牌 |
+| `GET` | `/api/sync/status` | 同步状态与最近回执 | 服务令牌 |
 
-`SITE_SERVICE_TOKEN` 仅存 Google 脚本属性；站点对应 `SITES_SERVICE_ACCESS` 是后台 secret。前端显式点击、同源且登录后才能复制（可选设置 `OWNER_EMAILS` 限定为所有者邮箱），不写入脚本包或客户端源码。Google 授权包括只读 Drive、外部请求和触发器管理；代码只枚举指定源目录。
+完整契约见 [openapi.yaml](openapi.yaml)。
 
-部署在 Cloudflare 时站点公开可读；导入、删除、恢复只对所有者开放：所有者通过 Access 保护的 `/login` 登录，API 自己校验 Access JWT（请求头或 `CF_Authorization` cookie），`/api/sync` 只接受服务令牌（见 DEPLOY.md）。部署在 Sites 时网站仅所有者可访问，`/api/sync` 的授权边界是 Sites 私有访问控制，`X-Sites-Report-Sync: google-apps-script` 仅标识协议。旧 `google-drive` 协议返回410。若未来调整为公开，必须先重新设计写入与设置凭证接口的独立授权。
+<details>
+<summary><b>在 Sites 平台上运行（旧部署方式）</b></summary>
 
-`sync_runs` 只记录 Google 程序真实回执。尚未收到记录显示待授权；触发器未安装显示停用；失败显示待检查；一小时未收到回执显示延迟。不要通过生产测试伪造已安装状态。
+不设置 `AUTH_PROVIDER` 时，API 信任 Sites 入口注入的 `oai-authenticated-user-*` 身份头。整个站点仅所有者可访问。
 
-## 验证边界
-成功导入、回读及去重只能证明全文传输完整；不证明日报中第三方研究、数字和链接的真实性。云端定时任务保存成功，也不等于未来运行已成功。
+- `/api/sync` 的授权边界是 Sites 的私有访问控制。
+- `X-Sites-Report-Sync: google-apps-script` 只用来标识协议。
+- Apps Script 用脚本属性 `SITE_SERVICE_TOKEN` 投递，值在站点「数据与同步」里复制。
+- 旧的 `google-drive` 协议返回 410。
+
+这种模式只能部署在 Sites 后面，否则身份头可以伪造。
+
+</details>
+
+## 同步状态怎么读
+
+`sync_runs` 只记录 Google 程序的真实回执。面板显示的状态含义如下：
+
+| 状态 | 含义 |
+| --- | --- |
+| 待授权 | 还没收到过回执 |
+| 停用 | 触发器未安装 |
+| 待检查 | 最近一轮失败，面板会列出失败的文件和原因 |
+| 延迟 | 一小时没有收到回执 |
+
+不要通过生产测试伪造「已安装」状态。
+
+<div align="center">
+<sub>拾讯 · Daily Signal</sub>
+</div>

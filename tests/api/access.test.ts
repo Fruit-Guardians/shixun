@@ -32,12 +32,20 @@ const base = () => ({ iss: `https://${TEAM}`, aud: [AUD], exp: nowSeconds() + 60
 const userToken = (email = 'owner@example.com', extra: Record<string, unknown> = {}) => jwt({ ...base(), sub: `sub-${email}`, email, ...extra });
 const serviceToken = () => jwt({ ...base(), sub: '', common_name: 'client.access' });
 
-function harness(env: Partial<ApiEnv> = ENV) {
+/** 和 Workers 一样：redirect 只接受 follow / manual，传 error 会直接抛错。 */
+function workersRedirect(init?: RequestInit) {
+  if (init?.redirect && init.redirect !== 'follow' && init.redirect !== 'manual') {
+    throw new TypeError(`Invalid redirect value, must be one of "follow" or "manual"`);
+  }
+}
+
+function harness(env: Partial<ApiEnv> = ENV, certs: () => Response = () => Response.json({ keys: [publicJwk] })) {
   const fetched: string[] = [];
   const verifier = createAccessVerifier({
-    fetch: async (input) => {
+    fetch: async (input, init) => {
+      workersRedirect(init);
       fetched.push(String(input));
-      return Response.json({ keys: [publicJwk] });
+      return certs();
     },
   });
   return { ...createHarness(env, { withSeeds: false, accessVerifier: verifier }), fetched, verifier };
@@ -125,6 +133,12 @@ test('public keys are fetched once from the team and reused', async () => {
   for (let i = 0; i < 3; i++) {
     assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser() })).status, 200);
   }
+  assert.deepEqual(h.fetched, [`https://${TEAM}/cdn-cgi/access/certs`]);
+});
+
+test('a redirected certs response fails closed instead of being followed', async () => {
+  const h = harness(ENV, () => new Response(null, { status: 302, headers: { location: 'https://evil.test/certs' } }));
+  assert.equal((await h.call(apiPaths.reports, { method: 'POST', json: body, headers: await asUser() })).status, 401);
   assert.deepEqual(h.fetched, [`https://${TEAM}/cdn-cgi/access/certs`]);
 });
 

@@ -87,7 +87,8 @@ export function createAccessVerifier(options: { fetch?: typeof fetch; now?: () =
   const cache = new Map<string, KeySet>();
 
   async function load(issuer: string): Promise<KeySet> {
-    const response = await fetchImpl(`${issuer}/cdn-cgi/access/certs`, { redirect: 'error' });
+    // Workers 不支持 redirect: 'error'；manual 下 3xx 不是 ok，同样按失败处理，不跟随跳转。
+    const response = await fetchImpl(`${issuer}/cdn-cgi/access/certs`, { redirect: 'manual' });
     if (!response.ok) throw new Error(`Access certs HTTP ${response.status}`);
     const body = (await response.json()) as { keys?: Jwk[] };
     const keys = new Map<string, CryptoKey>();

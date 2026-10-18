@@ -20,9 +20,13 @@ npx tsc --noEmit
 
 ## 自动同步
 源目录：`1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT`。
-完整约定在 `public/sync-instructions.md`。后台任务使用自身的 Google Drive 连接读取文件，再用 Sites 支持的 service access 投递并回读，不需要用户电脑常开。Google Drive 数据不通过浏览器插件代理，不依赖浏览器登录 Cookie。
+完整安装说明在 `integrations/google-apps-script/README.md` 与站点「数据与同步」面板。普通 Google Apps Script 每15分钟扫描一次源目录，增量投递与全文回读；不调用 AI，不依赖个人电脑开机。首次运行 `installSync` 需要所有者完成 Google 授权，文件准备好不代表触发器已安装。停用运行 `disableSync`。
 
-这是仅所有者可访问的网站。`/api/sync` 的授权边界是 Sites 私有访问控制，不是可伪造的 `X-Sites-Report-Sync` 标头；该标头只标识调用协议。如果未来公开网站，必须先改造 writer 鉴权并验证匿名写入被拒绝，再调整访问范围。定时任务也必须每次检查站点访问范围。
+`SITE_SERVICE_TOKEN` 仅存 Google 脚本属性；站点对应 `SITES_SERVICE_ACCESS` 是后台 secret。前端显式点击、同源且登录后才能复制，不写入脚本包或客户端源码。Google 授权包括只读 Drive、外部请求和触发器管理；代码只枚举指定源目录。
+
+这是仅所有者可访问的网站。`/api/sync` 的授权边界是 Sites 私有访问控制，`X-Sites-Report-Sync: google-apps-script` 仅标识协议。旧 `google-drive` 协议返回410。若未来调整为公开，必须先重新设计写入与设置凭证接口的独立授权。
+
+`sync_runs` 只记录 Google 程序真实回执。尚未收到记录显示待授权；触发器未安装显示停用；失败显示待检查；一小时未收到回执显示延迟。不要通过生产测试伪造已安装状态。
 
 ## 验证边界
 成功导入、回读及去重只能证明全文传输完整；不证明日报中第三方研究、数字和链接的真实性。云端定时任务保存成功，也不等于未来运行已成功。

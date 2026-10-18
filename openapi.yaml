@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 1.0.0
+  version: 2.0.0
 paths:
   /api/reports:
     get:
       summary: Read archived reports behind private Site access
       responses:
-        '200': {description: Reports and import status}
+        '200': {description: Reports, import status and actual program-sync heartbeat state}
         '503': {description: Storage temporarily unavailable}
     post:
       summary: Import Markdown as a signed-in visitor
@@ -20,7 +20,7 @@ paths:
   /api/sync:
     post:
       summary: Drive ingestion, exclusively behind owner-private Sites service access
-      description: Requires OAI-Sites-Authorization at Sites ingress and X-Sites-Report-Sync google-drive. Not a public endpoint.
+      description: Requires OAI-Sites-Authorization at Sites ingress and X-Sites-Report-Sync google-apps-script. Not a public endpoint.
       requestBody:
         required: true
         content:
@@ -37,7 +37,44 @@ paths:
         '200': {description: Exact content readback verified, includes id, hash, status, revision}
         '400': {description: Validation failed}
         '403': {description: Browser or invalid protocol request rejected}
+        '410': {description: Legacy google-drive AI sync protocol retired}
         '413': {description: File too large}
+  /api/sync/status:
+    get:
+      summary: Read actual Apps Script heartbeat; empty means awaiting_setup
+      responses:
+        '200': {description: mode, state, lastCheckedAt, triggerInstalled and run counters}
+        '503': {description: State storage temporarily unavailable}
+    post:
+      summary: Record Google runtime trigger state and run counters behind private ingress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [triggerInstalled]
+              properties:
+                triggerInstalled: {type: boolean}
+                checkedAt: {type: string, format: date-time}
+                created: {type: integer, minimum: 0, maximum: 10000}
+                updated: {type: integer, minimum: 0, maximum: 10000}
+                unchanged: {type: integer, minimum: 0, maximum: 10000}
+                failed: {type: integer, minimum: 0, maximum: 10000}
+      responses:
+        '200': {description: Recorded state}
+        '400': {description: Invalid state}
+        '403': {description: Browser or invalid protocol rejected}
+        '413': {description: State body too large}
+  /api/integration/setup-credential:
+    post:
+      summary: Explicit owner setup action to copy private service credential
+      description: Signed-in owner on owner-private Site, exact same Origin. Never cached. Never include token in static assets or logs.
+      responses:
+        '200': {description: Runtime service token for Google Script Properties only}
+        '401': {description: Sign-in required}
+        '403': {description: Origin mismatch}
+        '503': {description: Runtime credential not configured}
   /api/reports/{id}:
     get:
       summary: Download exact original Markdown

@@ -1,0 +1,1 @@
+export type SyncState={mode:'google-apps-script';state:'awaiting_setup'|'active'|'stale'|'attention'|'disabled';lastCheckedAt:string|null;triggerInstalled:boolean;created:number;updated:number;unchanged:number;failed:number;legacyWriterDisabled:true};

@@ -1,9 +1,10 @@
+import { getSyncState } from '@/lib/sync-state';
 import { listReports, ingestReport } from '@/lib/reports';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { env } from 'cloudflare:workers';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
-export async function GET(){try{const reports=await listReports();return Response.json({reports,drive:{status:reports.some(r=>r.sourceFileId)?'imported':'not_connected',folderId:'1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT'}},{headers});}catch{return Response.json({error:'归档暂时读取失败，请稍后刷新。'},{status:503,headers});}}
+export async function GET(){try{const reports=await listReports();return Response.json({reports,sync:await getSyncState(),drive:{status:reports.some(r=>r.sourceFileId)?'imported':'not_connected',folderId:'1K0N3bIvwxE8x38BKc9vVeKxqqDdlGjpT'}},{headers});}catch{return Response.json({error:'归档暂时读取失败，请稍后刷新。'},{status:503,headers});}}
 export async function POST(request:Request){
  const origin=request.headers.get('origin');
  if(origin&&origin!==new URL(request.url).origin)return Response.json({error:'请求来源不匹配。'},{status:403,headers});

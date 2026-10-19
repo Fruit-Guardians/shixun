@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { digestFor, reportSummary, sectionsFor, storiesFor } from '#shared';
-import type { Report, StorySummary } from '#shared';
+import type { FeedChannelStatus, Report, StorySummary } from '#shared';
+import FeedView from '#web/components/FeedView.tsx';
 import Markdown from '#web/components/Markdown.tsx';
 import ReaderView from '#web/components/ReaderView.tsx';
+import SourcesView, { cadenceLabel } from '#web/components/SourcesView.tsx';
 import StoryCard from '#web/components/StoryCard.tsx';
 import Topbar from '#web/components/Topbar.tsx';
+import type { FeedState } from '#web/hooks/useFeed.ts';
+import type { FeedChannelsState } from '#web/hooks/useFeedChannels.ts';
 import type { ReportText } from '#web/hooks/useReportText.ts';
 
 /** 组件渲染测试：服务端渲染成 HTML 再检查结构，不需要 DOM。交互由各自的纯函数与 reducer 测试覆盖。 */
@@ -96,4 +100,90 @@ test('visitors get no import button; the owner does', () => {
     );
   assert.ok(!topbar().includes('导入 Markdown'));
   assert.ok(topbar(noop).includes('导入 Markdown'));
+});
+
+const feedState = (over: Partial<FeedState> = {}): FeedState => ({
+  status: 'ready',
+  items: [],
+  channels: [],
+  nextCursor: null,
+  error: null,
+  loadingMore: false,
+  loadedAt: Date.parse('2026-10-19T12:00:00Z'),
+  ...over,
+});
+
+const channel = (over: Partial<FeedChannelStatus> & Pick<FeedChannelStatus, 'id' | 'source' | 'name'>): FeedChannelStatus => ({
+  group: 'blogs',
+  description: '一句话介绍。',
+  homepage: 'https://example.test/',
+  everyMinutes: 60,
+  lastRunAt: null,
+  ok: false,
+  fetched: 0,
+  error: null,
+  latestAt: null,
+  ...over,
+});
+
+test('the feed links out safely, shows severity and score, and hides the refresh button from visitors', () => {
+  const state = feedState({
+    items: [
+      { id: 'nvd:CVE-2026-1', source: 'nvd', channel: 'nvd', channelName: 'NVD 高危漏洞', title: 'CVE-2026-1 · bug', url: 'https://nvd.nist.gov/vuln/detail/CVE-2026-1', discussionUrl: null, summary: 's', author: null, score: null, severity: 'critical', tags: ['CVSS 9.8'], publishedAt: '2026-10-19T11:00:00Z' },
+      { id: 'hackernews:1', source: 'hackernews', channel: 'hackernews', channelName: 'Hacker News', title: 'Show HN', url: 'https://a.test/', discussionUrl: 'https://news.ycombinator.com/item?id=1', summary: '', author: 'pg', score: 1234, severity: null, tags: [], publishedAt: '2026-10-19T09:00:00Z' },
+    ],
+    channels: [
+      channel({ id: 'nvd', source: 'nvd', name: 'NVD 高危漏洞', lastRunAt: '2026-10-19T11:30:00Z', ok: true, fetched: 1 }),
+      channel({ id: 'ghsa', source: 'ghsa', name: 'GitHub Advisory', lastRunAt: '2026-10-19T11:00:00Z', ok: false, error: 'HTTP 403' }),
+    ],
+    nextCursor: 'c',
+  });
+  const visitor = renderToStaticMarkup(<FeedView feed={state} source={null} onSource={noop} onLoadMore={noop} onReload={noop} />);
+  assert.equal([...visitor.matchAll(/target="_blank" rel="noopener noreferrer"/g)].length, 3);
+  assert.match(visitor, /data-severity="critical">严重</);
+  assert.match(visitor, /▲ 1,234/);
+  assert.match(visitor, /1 小时前/);
+  assert.match(visitor, /1\/2 个频道正常/);
+  assert.match(visitor, /HTTP 403/);
+  assert.match(visitor, /加载更早的条目/);
+  assert.doesNotMatch(visitor, /立即抓取/);
+  const owner = renderToStaticMarkup(<FeedView feed={state} source="nvd" onSource={noop} onLoadMore={noop} onReload={noop} onRefreshAll={noop} />);
+  assert.match(owner, /立即抓取/);
+  assert.match(owner, /aria-pressed="true"[^>]*><span class="tag-dot"[^>]*><\/span>NVD 漏洞/);
+});
+
+test('an empty feed explains when items will appear', () => {
+  const html = renderToStaticMarkup(<FeedView feed={feedState()} source={null} onSource={noop} onLoadMore={noop} onReload={noop} />);
+  assert.match(html, /信源还没有抓取过/);
+});
+
+test('the sources page groups channels, links homepages safely and shows cadence and status', () => {
+  const sources: FeedChannelsState = {
+    status: 'ready',
+    error: null,
+    loadedAt: Date.parse('2026-10-19T12:00:00Z'),
+    channels: [
+      channel({ id: 'hackernews', source: 'hackernews', group: 'community', name: 'Hacker News', homepage: 'https://news.ycombinator.com/', everyMinutes: 30, lastRunAt: '2026-10-19T11:50:00Z', ok: true, fetched: 30, latestAt: '2026-10-19T11:00:00Z' }),
+      channel({ id: 'sec-portswigger', source: 'security', group: 'sec-web', name: 'PortSwigger Research', homepage: 'https://portswigger.net/research', everyMinutes: 360, lastRunAt: '2026-10-19T10:00:00Z', ok: false, error: 'HTTP 503' }),
+      channel({ id: 'sec-limitedresults', source: 'security', group: 'sec-archive', name: 'LimitedResults', homepage: 'https://limitedresults.com/', everyMinutes: 1440, latestAt: '2021-06-01T00:00:00.000Z' }),
+    ],
+  };
+  const html = renderToStaticMarkup(<SourcesView sources={sources} onReload={noop} onOpenSource={noop} />);
+  assert.equal([...html.matchAll(/target="_blank" rel="noopener noreferrer"/g)].length, 3);
+  // 分组按 FEED_GROUPS 的顺序。
+  const headings = [...html.matchAll(/<h2 id="sources-([\w-]+)-title"/g)].map((m) => m[1]);
+  assert.deepEqual(headings, ['community', 'sec-web', 'sec-archive']);
+  assert.match(html, /<strong>3<\/strong> 个频道/);
+  assert.match(html, /安全研究博客 <strong>2<\/strong> 个/);
+  assert.match(html, /每 30 分钟/);
+  assert.match(html, /每 6 小时/);
+  assert.match(html, /每天/);
+  assert.match(html, /HTTP 503/);
+  assert.match(html, /尚未抓取/);
+  assert.match(html, /最新一篇 <time[^>]*>2021-06-01</);
+  assert.match(html, /10 分钟前<\/time>抓取 · 30 条/);
+});
+
+test('cadence labels', () => {
+  assert.deepEqual([30, 60, 90, 180, 1440, 2880].map(cadenceLabel), ['每 30 分钟', '每 1 小时', '每 90 分钟', '每 3 小时', '每天', '每 2 天']);
 });

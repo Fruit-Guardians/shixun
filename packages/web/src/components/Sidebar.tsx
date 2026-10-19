@@ -42,6 +42,14 @@ export default function Sidebar(props: SidebarProps) {
             稍后阅读<span className="leader" />
             <span className="num">{savedCount}</span>
           </button>
+          <button className={on(view === 'feed')} onClick={() => props.onNavigate('feed')}>
+            信源速递<span className="leader" />
+            <span className="num">live</span>
+          </button>
+          <button className={on(view === 'sources')} onClick={() => props.onNavigate('sources')}>
+            信息源<span className="leader" />
+            <span className="num">ls</span>
+          </button>
         </div>
       </section>
 

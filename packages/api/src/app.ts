@@ -6,6 +6,7 @@ import type { ApiEnv, ApiOptions } from './env.ts';
 import { HttpError, errorResponse, json } from './http.ts';
 import { Router } from './router.ts';
 import { setupCredentialRoute } from './routes/credential.ts';
+import { feedChannelsRoute, feedRoute, refreshFeedRoute } from './routes/feed.ts';
 import { healthRoute } from './routes/health.ts';
 import { downloadReportRoute, importReportRoute, listReportsRoute } from './routes/reports.ts';
 import { searchRoute } from './routes/search.ts';
@@ -25,6 +26,9 @@ export function buildRouter(): Router {
     .post('/api/reports/:id/versions/:versionId/restore', restoreVersionRoute)
     .get(apiPaths.search, searchRoute)
     .get(apiPaths.session, sessionRoute)
+    .get(apiPaths.feed, feedRoute)
+    .get(apiPaths.feedChannels, feedChannelsRoute)
+    .post(apiPaths.feedRefresh, refreshFeedRoute)
     .post(apiPaths.sync, ingestSyncRoute)
     .get(apiPaths.syncStatus, readSyncStatusRoute)
     .post(apiPaths.syncStatus, recordSyncStatusRoute)
@@ -42,13 +46,14 @@ export function createApiHandler(options: ApiOptions = {}): ApiHandler {
   const seeds = options.seedReports ?? [];
   const clock = options.now ?? (() => new Date());
   const verifier = options.accessVerifier ?? defaultAccessVerifier;
+  const feedFetch = options.feedFetch ?? ((input, init) => fetch(input, init));
   return async (request, env) => {
     try {
       const url = new URL(request.url);
       const { handler, params } = router.resolve(request.method, url.pathname);
       let caller: Promise<Caller> | undefined;
       const resolve = () => (caller ??= resolveCaller(request, env, verifier));
-      return await handler({ request, url, env, params, seeds, now: clock(), caller: resolve });
+      return await handler({ request, url, env, params, seeds, now: clock(), caller: resolve, feedFetch });
     } catch (error) {
       if (error instanceof HttpError) return errorResponse(error);
       console.error('api unhandled error', error);

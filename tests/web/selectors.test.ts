@@ -5,7 +5,7 @@ import { reportSummary, type Report } from '#shared';
 import { deriveBrowse, matchesQuery, splitHighlight } from '#web/lib/selectors.ts';
 import { browseReducer, initialBrowse } from '#web/state/browse.ts';
 import { archiveReducer, initialArchive } from '#web/state/archive.ts';
-import { monthDay, readMinutes, tocLabel } from '#web/lib/format.ts';
+import { monthDay, readMinutes, timeAgo, tocLabel } from '#web/lib/format.ts';
 import { fileProblem, guessMetadata } from '#web/lib/import-file.ts';
 import { parseReportId, reportHash } from '#web/lib/route.ts';
 
@@ -129,4 +129,14 @@ test('report route hash round-trips ids with special characters', () => {
   assert.equal(parseReportId('#' + reportHash(id)), id);
   assert.equal(parseReportId(''), '');
   assert.equal(parseReportId('#other=1'), '');
+});
+
+test('timeAgo uses the caller clock and falls back to the date after 30 days', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  assert.equal(timeAgo('2026-10-19T11:59:30Z', now), '刚刚');
+  assert.equal(timeAgo('2026-10-19T11:48:00Z', now), '12 分钟前');
+  assert.equal(timeAgo('2026-10-19T09:00:00Z', now), '3 小时前');
+  assert.equal(timeAgo('2026-10-14T12:00:00Z', now), '5 天前');
+  assert.equal(timeAgo('2026-08-01T00:00:00Z', now), '2026-08-01');
+  assert.equal(timeAgo('nope', now), '');
 });

@@ -1,5 +1,6 @@
 import type { Report } from '#shared';
 import type { Caller } from './auth.ts';
+import type { FeedFetch } from './services/feed.ts';
 import type { ApiEnv } from './env.ts';
 import { HttpError } from './http.ts';
 
@@ -14,6 +15,8 @@ export interface RequestContext {
   now: Date;
   /** 解析调用方身份（按需、每个请求只解析一次）。 */
   caller: () => Promise<Caller>;
+  /** 抓取信源用的 fetch；测试可注入。 */
+  feedFetch: FeedFetch;
 }
 
 export type Handler = (context: RequestContext) => Response | Promise<Response>;

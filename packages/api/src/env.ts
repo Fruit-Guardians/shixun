@@ -1,5 +1,6 @@
 import type { Report } from '#shared';
 import type { AccessVerifier } from './access.ts';
+import type { FeedFetch } from './services/feed.ts';
 
 /** 运行环境绑定。由宿主（Worker）在每次请求时传入，API 包本身不读取任何全局。 */
 export interface ApiEnv {
@@ -19,6 +20,10 @@ export interface ApiEnv {
   CF_ACCESS_TEAM_DOMAIN?: string;
   /** Cloudflare Access 应用的 AUD Tag。 */
   CF_ACCESS_AUD?: string;
+  /** 可选：GitHub 令牌（无需任何权限）。GitHub Advisory 匿名访问每小时 60 次且按出口 IP 计，Workers 上很容易被限流。 */
+  GITHUB_TOKEN?: string;
+  /** 可选：NVD API Key，提高 NVD 的限流额度。 */
+  NVD_API_KEY?: string;
 }
 
 export interface ApiOptions {
@@ -28,4 +33,6 @@ export interface ApiOptions {
   now?: () => Date;
   /** Cloudflare Access JWT 校验器；默认使用全局共享的一个（公钥缓存跨请求）。 */
   accessVerifier?: AccessVerifier;
+  /** 抓取信源用的 fetch；默认全局 fetch，测试可注入。 */
+  feedFetch?: FeedFetch;
 }

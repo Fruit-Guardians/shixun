@@ -18,6 +18,8 @@
       "migrations_dir": "drizzle"
     }
   ],
+  // 信源速递：每 5 分钟轮流抓取一个频道（Hacker News、GitHub Trending、RSS、NVD、GitHub Advisory）。
+  "triggers": { "crons": ["*/5 * * * *"] },
   // 非机密配置。CF_ACCESS_AUD 与 OWNER_EMAILS 用 `wrangler secret put` 设置（部署不会覆盖）；缺失时写操作一律拒绝。
   "vars": {
     "AUTH_PROVIDER": "cloudflare-access",

@@ -65,3 +65,40 @@ export const syncRuns = sqliteTable(
   },
   (table) => [index('sync_runs_received_at_idx').on(table.receivedAt)],
 );
+
+/** 信源速递：定时抓取的公开条目。id 为 `<channel>:<来源内 id>`，重复抓到时更新标题、得分等。 */
+export const feedItems = sqliteTable(
+  'feed_items',
+  {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(),
+    channel: text('channel').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    /** 讨论或详情页（Hacker News 评论、GitHub 公告页）；没有时为 null。 */
+    discussionUrl: text('discussion_url'),
+    summary: text('summary').notNull().default(''),
+    author: text('author'),
+    score: integer('score'),
+    severity: text('severity'),
+    /** JSON 字符串数组。 */
+    tags: text('tags').notNull().default('[]'),
+    publishedAt: text('published_at').notNull(),
+    fetchedAt: text('fetched_at').notNull(),
+  },
+  (table) => [
+    index('feed_items_published_idx').on(table.publishedAt, table.id),
+    index('feed_items_source_published_idx').on(table.source, table.publishedAt, table.id),
+  ],
+);
+
+/** 每个频道最近一次抓取的结果。 */
+export const feedChannels = sqliteTable('feed_channels', {
+  id: text('id').primaryKey(),
+  lastRunAt: text('last_run_at').notNull(),
+  ok: integer('ok').notNull(),
+  fetched: integer('fetched').notNull().default(0),
+  error: text('error'),
+  /** 最近一次抓到的条目里最新的发布时间（含保留期以外的），供信息源页面显示「最近文章」；没抓到过为 null。 */
+  latestAt: text('latest_at'),
+});

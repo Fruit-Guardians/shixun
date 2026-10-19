@@ -57,6 +57,23 @@ Zero Trust → 设置 → 自定义页面（或团队域名设置）里查看，
 打开站点地址直接就能浏览。需要导入、删除或恢复版本时，先访问 `https://shixun.<你的子域>.workers.dev/login`，
 Access 登录完成后会回到首页；登录有效期由 Access 应用的会话时长决定，过期后再访问一次 `/login`。
 
+### 信源速递（定时抓取）
+
+`wrangler.cloudflare.jsonc` 里的 `triggers.crons`（`*/5 * * * *`）每 5 分钟抓取最该更新的三个频道，各频道按自己的间隔（30 分钟～1 天）刷新。
+单次调用最多二十几个子请求，在免费版的子请求限制之内；部署后不需要额外操作，两个小时左右全部 68 个频道会抓取一遍。
+抓取情况可以在站点的「信息源」页面查看。
+
+GitHub Advisory 匿名调用按出口 IP 限流，Workers 共用出口，基本都会被限流。建议配置一个**不勾选任何权限**的
+GitHub fine-grained 令牌（只用来提高额度）；NVD 的 API Key 可选：
+
+```sh
+npx wrangler secret put GITHUB_TOKEN --config wrangler.cloudflare.jsonc
+npx wrangler secret put NVD_API_KEY --config wrangler.cloudflare.jsonc   # 可选
+```
+
+想立刻看到内容：所有者登录后在「信源速递」点「立即抓取」，或用 `INGEST_TOKEN` 调 `POST /api/feed/refresh`。
+一次请求有子请求上限，会先抓最久没更新的约 30 个频道（预算 40 个子请求），剩下的交给定时任务或再点一次。
+
 ## 4. 给 Google Apps Script 创建服务令牌
 
 1. Zero Trust → Access → 服务凭据（Service credentials）→ 服务令牌 → 创建。
@@ -100,6 +117,7 @@ Worker 名称必须和配置里的 `name`（`shixun`）一致。之后每次推�
 
 - 访客看不到导入、恢复、删除和同步设置，也看不到同步失败明细。所有者访问 `/login` 登录后才会出现，「数据与同步」里有退出登录入口。
 - 所有响应都带 CSP、HSTS、`X-Frame-Options: DENY` 等安全头（`packages/api/src/security.ts`）。以后如果引入新的外部脚本、字体或接口地址，要同步放行。
+- 信源条目来自第三方：只保存去掉 HTML 的纯文本，链接只接受 http(s)，以新窗口打开且不带 opener/referrer。抓取失败只记录状态码或超时，不保存响应内容。
 - `preview_urls` 已关闭：预览地址不在 Access 应用范围内，同步接口在那里拿不到服务令牌 JWT。
 - 如果以后绑定自定义域名，要把这个域名的 `/login` 和 `/api/sync` 也加入 Access 应用，否则在新域名上无法登录和同步（阅读不受影响）。
 - `AUTH_PROVIDER=cloudflare-access` 时，`oai-authenticated-user-*` 等明文身份头一律忽略。不要在 Cloudflare 上去掉这个变量：

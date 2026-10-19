@@ -129,3 +129,35 @@ test('getSession reads the visitor identity and rejects malformed payloads', asy
   });
   await assert.rejects(createApiClient({ fetcher: reply({ owner: 'yes' }) }).getSession(), (e: ApiError) => e.code === 'bad_response');
 });
+
+test('getFeed builds the query, validates the payload and refreshFeed posts the channel', async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const api = createApiClient({
+    fetcher: async (url, init) => {
+      calls.push({ url, init });
+      return url.startsWith('/api/feed/refresh') ? Response.json({ channels: [] }) : Response.json({ items: [], channels: [] });
+    },
+  });
+  assert.deepEqual(await api.getFeed(), { items: [], channels: [], nextCursor: null });
+  await api.getFeed({ source: 'nvd', cursor: '2026-10-19T00:00:00.000Z|nvd:CVE-1', limit: 20 });
+  assert.equal(calls[0].url, '/api/feed');
+  assert.equal(calls[1].url, `/api/feed?${new URLSearchParams({ source: 'nvd', cursor: '2026-10-19T00:00:00.000Z|nvd:CVE-1', limit: '20' })}`);
+  await api.refreshFeed('hackernews');
+  assert.equal(calls[2].init?.method, 'POST');
+  assert.equal(calls[2].init?.body, JSON.stringify({ channel: 'hackernews' }));
+  const bad = createApiClient({ fetcher: reply({ items: 'x' }) });
+  await assert.rejects(bad.getFeed(), (e: ApiError) => e.code === 'bad_response');
+});
+
+test('getFeedChannels reads the channel list and rejects malformed payloads', async () => {
+  const calls: string[] = [];
+  const api = createApiClient({
+    fetcher: async (url) => {
+      calls.push(url);
+      return Response.json({ channels: [] });
+    },
+  });
+  assert.deepEqual(await api.getFeedChannels(), { channels: [] });
+  assert.deepEqual(calls, ['/api/feed/channels']);
+  await assert.rejects(createApiClient({ fetcher: reply({ channels: null }) }).getFeedChannels(), (e: ApiError) => e.code === 'bad_response');
+});

@@ -89,6 +89,8 @@ test('reads are public without any Access JWT', async () => {
   assert.equal((await h.call(apiPaths.health)).status, 200);
   assert.equal((await h.call(apiPaths.reports)).status, 200);
   assert.equal((await h.call(`${apiPaths.search}?q=x`)).status, 200);
+  assert.equal((await h.call(apiPaths.feed)).status, 200);
+  assert.equal((await h.call(apiPaths.feedChannels)).status, 200);
   assert.equal(h.fetched.length, 0);
 });
 
@@ -237,4 +239,15 @@ test('every response gets the security headers without losing its own', async ()
   const csp = secured.headers.get('content-security-policy') ?? '';
   for (const directive of ["frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "connect-src 'self'"]) assert.ok(csp.includes(directive), directive);
   assert.equal(await secured.text(), 'x');
+});
+
+test('only the owner can refresh the feeds in Access mode', async () => {
+  const h = harness();
+  assert.equal((await h.call(apiPaths.feedRefresh, { method: 'POST', headers: { ...USER_HEADERS, origin: ORIGIN } })).status, 401);
+  const reader = await h.call(apiPaths.feedRefresh, { method: 'POST', json: { channel: 'nope' }, headers: { ...(await asUser('reader@example.com')), origin: ORIGIN } });
+  assert.equal(reader.status, 403);
+  assert.equal(((await reader.json()) as { code: string }).code, 'not_owner');
+  // 所有者通过了身份检查，才轮到校验频道。
+  const owner = await h.call(apiPaths.feedRefresh, { method: 'POST', json: { channel: 'nope' }, headers: { ...(await asUser()), origin: ORIGIN } });
+  assert.equal(owner.status, 400);
 });

@@ -7,14 +7,14 @@
 
 **每日技术观察 · 从信息中拾取信号**
 
-Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原样归档成一个可搜索、可阅读的网站。
+Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原样归档成一个可搜索、可阅读的网站；另有「信源速递」定时直连 Hacker News、GitHub Trending、技术博客和漏洞库。
 
 [![在线站点](https://img.shields.io/badge/在线站点-shixun.bx33661.workers.dev-0F7A35?style=flat-square)](https://shixun.bx33661.workers.dev)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)](DEPLOY.md)
 [![React 19](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](packages/web)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522.13-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](package.json)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.5.0-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)](openapi.yaml)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.6.0-6BA539?style=flat-square&logo=openapiinitiative&logoColor=white)](openapi.yaml)
 
 [在线阅读](https://shixun.bx33661.workers.dev) · [部署](DEPLOY.md) · [架构](ARCHITECTURE.md) · [日报格式](REPORT_FORMAT.md) · [自动同步](integrations/google-apps-script/README.md) · [接口](openapi.yaml)
 
@@ -37,6 +37,14 @@ Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原�
   - 浅色/深色主题
   - 稍后阅读（保存在本机）
   - 下载原文和历史版本
+- **信源速递**：Workers Cron 每 5 分钟抓取最该更新的三个公开频道（各频道有自己的刷新间隔），独立成一个信息流，可按来源筛选。「信息源」页面按分组列出全部 68 个频道的介绍、首页、抓取频率和最近状态。
+  - 社区：Hacker News 首页与 Show HN、Lobsters、V2EX 热门。
+  - GitHub：Trending，以及 React、Next.js、Bun、vLLM、Ollama 的版本发布。
+  - 论文：Hugging Face Daily Papers、arXiv cs.AI/CL/LG。
+  - 博客：8 个技术与安全新闻博客，以及阮一峰的网络日志、科技爱好者周刊、InfoQ 中文、少数派。
+  - 安全研究：37 个研究博客，分 10 组（Web、二进制与浏览器、Windows 与 AD、云、威胁情报、移动与硬件、供应链、密码学、AI 安全、旧文精读），如 PortSwigger、Project Zero、watchTowr、Trail of Bits、腾讯科恩与玄武。
+  - 漏洞：CISA KEV（在野利用）、NVD 高危/严重 CVE、GitHub Advisory、OSV（PyPI、npm、Go、crates.io）。
+  - 不调用任何模型，只去掉 HTML、只保留 http(s) 链接；条目保留 30 天。频道列表在 [channels.ts](packages/api/src/feeds/channels.ts)。
 - **零 AI 同步**：同步只是一个普通的 Google Apps Script，不调用任何模型，也不需要电脑开机。
 - **公开阅读，写入受保护**：
   - 任何人都能浏览。导入、删除和恢复版本只对所有者开放，由 Cloudflare Access JWT 校验。
@@ -105,7 +113,10 @@ tests/          shared / api / web 的单元、接口与组件渲染测试
 | `GET` | `/api/search?q=` | 跨日报全文搜索 | 公开 |
 | `GET` | `/api/health` | 健康检查 | 公开 |
 | `GET` | `/api/session` | 当前访客是否所有者（只决定显示哪些按钮） | 公开 |
+| `GET` | `/api/feed?source=&cursor=` | 信源速递，按发布时间倒序分页 | 公开 |
 | `POST` | `/api/reports` | 手动导入 | 所有者 |
+| `GET` | `/api/feed/channels` | 全部信源频道：介绍、首页、频率、最近状态 | 公开 |
+| `POST` | `/api/feed/refresh` | 立即抓取信源（最该更新的一批，或指定频道） | 所有者 |
 | `DELETE` | `/api/reports/{id}` | 删除一期（原文留在历史里） | 所有者 |
 | `POST` | `/api/reports/{id}/versions/{versionId}/restore` | 恢复历史版本 | 所有者 |
 | `POST` | `/api/sync` | Apps Script 无人值守投递 | 服务令牌 |

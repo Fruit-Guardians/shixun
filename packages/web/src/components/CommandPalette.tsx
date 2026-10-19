@@ -35,6 +35,8 @@ const VIEWS: { view: View; cmd: string; label: string; keywords: string[] }[] = 
   { view: 'today', cmd: 'cd ~/today', label: '每日观察', keywords: ['today', 'home', '首页'] },
   { view: 'archive', cmd: 'git log --reports', label: '日报归档', keywords: ['archive', '归档', '历史'] },
   { view: 'saved', cmd: 'ls ~/read-later', label: '稍后阅读', keywords: ['saved', '收藏', 'bookmark'] },
+  { view: 'feed', cmd: 'tail -f ~/feeds', label: '信源速递', keywords: ['feed', 'rss', 'hacker news', 'github', 'cve', '漏洞', '信源'] },
+  { view: 'sources', cmd: 'ls ~/sources', label: '信息源一览', keywords: ['sources', 'about', '来源', '频道', '博客', '安全'] },
 ];
 
 /** ⌘K 命令面板：跳转视图、打开日报、筛选领域、搜索与切换配色，全部键盘可达。 */
@@ -168,7 +170,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
             <kbd>↵</kbd> 执行
           </span>
           <span>
-            <kbd>/</kbd> 搜索框 · <kbd>1-3</kbd> 切换视图
+            <kbd>/</kbd> 搜索框 · <kbd>1-5</kbd> 切换视图
           </span>
         </div>
       </DialogContent>

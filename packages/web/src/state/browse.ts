@@ -1,6 +1,6 @@
 import type { Category } from '#shared';
 
-export type View = 'today' | 'archive' | 'saved';
+export type View = 'today' | 'archive' | 'saved' | 'feed' | 'sources';
 
 export interface BrowseState {
   view: View;

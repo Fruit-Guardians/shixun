@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 import type { View } from '../state/browse.ts';
 
-const VIEW_KEYS: Record<string, View> = { '1': 'today', '2': 'archive', '3': 'saved' };
+const VIEW_KEYS: Record<string, View> = { '1': 'today', '2': 'archive', '3': 'saved', '4': 'feed', '5': 'sources' };
 
 interface Shortcuts {
   /** ⌘K / Ctrl+K：命令面板。 */
   onCommand: () => void;
   /** `/`：聚焦搜索框。 */
   onSearch: () => void;
-  /** 1 / 2 / 3：切换主视图（与顶栏 kbd 提示一致）。 */
+  /** 1 / 2 / 3 / 4：切换主视图（与顶栏 kbd 提示一致）。 */
   onView: (view: View) => void;
   /** Esc：关闭移动端导航（对话框自己处理 Esc）。 */
   onEscape: () => void;

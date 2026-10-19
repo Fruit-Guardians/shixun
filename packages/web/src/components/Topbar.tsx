@@ -23,6 +23,8 @@ const NAV: { view: View; label: string }[] = [
   { view: 'today', label: '每日观察' },
   { view: 'archive', label: '日报归档' },
   { view: 'saved', label: '稍后阅读' },
+  { view: 'feed', label: '信源速递' },
+  { view: 'sources', label: '信息源' },
 ];
 
 export default function Topbar({ view, reading, savedCount, theme, palette, onPalette, onNavigate, onToggleTheme, onToggleMobileNav, onImport, onCommand }: TopbarProps) {

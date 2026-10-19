@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 拾讯日报归档 API
-  version: 3.5.0
+  version: 3.6.0
   description: |
     Every response carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
     Errors are always JSON `{ error: string, code?: string }` (see `Error`). Unknown paths return 404 and
@@ -171,6 +171,74 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/SearchResponse'}
         '400': {$ref: '#/components/responses/Invalid'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/feed:
+    get:
+      summary: Feed items fetched from public sources, newest first
+      description: |
+        Added in 3.6.0. A Workers cron runs every 5 minutes and fetches the three most overdue channels, each on its
+        own interval (communities, GitHub Trending and releases, papers, tech and security research blogs, CISA KEV,
+        NVD, GitHub Advisory and OSV; `GET /api/feed/channels` lists them all). Items published before the 30-day
+        retention window are not stored. No model is involved: titles and summaries are the sources' own text with HTML stripped, and links are
+        http(s) only. Items are kept for 30 days by publish time. GitHub Trending has no publish time, so
+        `publishedAt` is when the repository was first seen on the page.
+      parameters:
+        - {in: query, name: source, required: false, schema: {$ref: '#/components/schemas/FeedSource'}}
+        - {in: query, name: limit, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {in: query, name: cursor, required: false, description: '`nextCursor` from the previous page', schema: {type: string}}
+      responses:
+        '200':
+          description: One page of items and the status of every channel
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FeedResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/feed/channels:
+    get:
+      summary: Every feed channel with its description, homepage, interval and latest run
+      description: |
+        Added in 3.6.0. Public. Backs the sources page. Channels are listed in display order; `group` is the section
+        they belong to. `latestAt` is the newest publish time seen in the latest successful fetch, including items
+        too old to be stored, so rarely updated blogs still show when they last posted.
+      responses:
+        '200':
+          description: All channels
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FeedChannelsResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/feed/refresh:
+    post:
+      summary: Fetch channels now (owner or INGEST_TOKEN)
+      description: |
+        Added in 3.6.0. Fetches one channel (`{"channel": "<id>"}`) or, with an empty body, the stalest channels in turn
+        until the per-request subrequest budget is used up (the rest are left to the cron).
+        The response lists only the channels fetched by this call.
+        Same identity rules as `POST /api/reports`: a bearer `INGEST_TOKEN`, or in Access mode a same-origin
+        request from an owner. Failures are recorded per channel and returned, not raised.
+      security: [{ingestToken: []}, {}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel: {type: string, description: 'Channel id, e.g. `hackernews`, `kev`, `osv-pypi`, `rss-lwn`'}
+      responses:
+        '200':
+          description: Status of each fetched channel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channels]
+                properties:
+                  channels: {type: array, items: {$ref: '#/components/schemas/FeedChannelStatus'}}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /api/sync:
     post:
@@ -423,3 +491,55 @@ components:
           properties:
             status: {type: string, enum: [imported, not_connected]}
             folderId: {type: string}
+    FeedSource:
+      type: string
+      enum: [hackernews, lobsters, v2ex, github, releases, papers, rss, zh, security, kev, nvd, ghsa, osv]
+    FeedGroup:
+      type: string
+      description: Section on the sources page; `sec-*` groups are security research blogs by topic
+      enum: [community, github, papers, blogs, zh, vulns, sec-web, sec-binary, sec-windows, sec-cloud, sec-threat, sec-mobile, sec-supply, sec-crypto, sec-ai, sec-archive]
+    FeedItem:
+      type: object
+      required: [id, source, channel, channelName, title, url, discussionUrl, summary, author, score, severity, tags, publishedAt]
+      properties:
+        id: {type: string, description: '`<channel>:<id within the source>`'}
+        source: {$ref: '#/components/schemas/FeedSource'}
+        channel: {type: string}
+        channelName: {type: string}
+        title: {type: string}
+        url: {type: string, format: uri, description: http(s) only}
+        discussionUrl: {type: [string, 'null'], description: Hacker News comments page}
+        summary: {type: string, description: Plain text, may be empty}
+        author: {type: [string, 'null']}
+        score: {type: [integer, 'null'], description: Hacker News points or GitHub stars gained today}
+        severity: {type: [string, 'null'], enum: [critical, high, medium, low, null]}
+        tags: {type: array, items: {type: string}, description: 'Language, total stars, CVE id, CVSS score, affected packages'}
+        publishedAt: {type: string, format: date-time}
+    FeedChannelStatus:
+      type: object
+      required: [id, source, group, name, description, homepage, everyMinutes, lastRunAt, ok, fetched, error, latestAt]
+      properties:
+        id: {type: string}
+        source: {$ref: '#/components/schemas/FeedSource'}
+        group: {$ref: '#/components/schemas/FeedGroup'}
+        name: {type: string}
+        description: {type: string, description: One-sentence introduction (Chinese)}
+        homepage: {type: string, format: uri}
+        everyMinutes: {type: integer, description: Minimum minutes between two fetches}
+        lastRunAt: {type: [string, 'null'], format: date-time, description: Null until the first fetch}
+        ok: {type: boolean}
+        fetched: {type: integer, description: Items parsed by the latest fetch}
+        error: {type: [string, 'null'], description: 'Status code, timeout or "nothing parsed"; never response content'}
+        latestAt: {type: [string, 'null'], format: date-time, description: 'Newest publish time seen; kept when a later fetch fails or is empty'}
+    FeedChannelsResponse:
+      type: object
+      required: [channels]
+      properties:
+        channels: {type: array, items: {$ref: '#/components/schemas/FeedChannelStatus'}}
+    FeedResponse:
+      type: object
+      required: [items, channels, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/FeedItem'}}
+        channels: {type: array, items: {$ref: '#/components/schemas/FeedChannelStatus'}}
+        nextCursor: {type: [string, 'null']}

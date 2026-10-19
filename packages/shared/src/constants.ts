@@ -30,6 +30,35 @@ export const MAX_LISTED_VERSIONS = 50;
 /** 搜索词的字符上限。 */
 export const MAX_SEARCH_CHARS = 100;
 
+/** 信源速递的来源种类；顺序即界面筛选顺序。 */
+export const FEED_SOURCES = ['hackernews', 'lobsters', 'v2ex', 'github', 'releases', 'papers', 'rss', 'zh', 'security', 'kev', 'nvd', 'ghsa', 'osv'] as const;
+/** 信息源页面上频道的分组；顺序即页面顺序。sec-* 是安全研究博客的细分方向。 */
+export const FEED_GROUPS = [
+  'community',
+  'github',
+  'papers',
+  'blogs',
+  'zh',
+  'vulns',
+  'sec-web',
+  'sec-binary',
+  'sec-windows',
+  'sec-cloud',
+  'sec-threat',
+  'sec-mobile',
+  'sec-supply',
+  'sec-crypto',
+  'sec-ai',
+  'sec-archive',
+] as const;
+/** 漏洞严重程度，从高到低。 */
+export const FEED_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+/** GET /api/feed 默认与最大条数。 */
+export const FEED_PAGE_SIZE = 50;
+export const MAX_FEED_PAGE_SIZE = 100;
+/** 信源条目保留时长（按发布时间）；更早的在抓取时清理。 */
+export const FEED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** Google Apps Script 同步协议标识（仅标识协议，不是认证）。 */
 export const SYNC_PROTOCOL_HEADER = 'x-sites-report-sync';
 export const SYNC_PROTOCOL_CURRENT = 'google-apps-script';
@@ -54,4 +83,7 @@ export const apiPaths = {
   sync: '/api/sync',
   syncStatus: '/api/sync/status',
   setupCredential: '/api/integration/setup-credential',
+  feed: '/api/feed',
+  feedRefresh: '/api/feed/refresh',
+  feedChannels: '/api/feed/channels',
 } as const;

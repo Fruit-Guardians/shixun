@@ -2,6 +2,10 @@ import { apiPaths } from '#shared';
 import type {
   ApiErrorBody,
   DeleteReportResponse,
+  FeedChannelsResponse,
+  FeedRefreshResponse,
+  FeedResponse,
+  FeedSource,
   ImportRequest,
   IngestResult,
   ReportVersionsResponse,
@@ -82,6 +86,27 @@ export function createApiClient(options: { baseUrl?: string; fetcher?: Fetcher }
       const data = await request<Partial<SessionResponse> | null>(apiPaths.session, { signal });
       if (!data || typeof data.owner !== 'boolean') throw new ApiError('身份返回格式异常。', 200, 'bad_response');
       return { signedIn: Boolean(data.signedIn), owner: data.owner, email: data.email ?? null, loginPath: data.loginPath ?? null, logoutPath: data.logoutPath ?? null };
+    },
+    /** 信源速递的一页（按发布时间倒序）；`cursor` 取上一页的 nextCursor。 */
+    async getFeed(options: { source?: FeedSource | null; cursor?: string | null; limit?: number } = {}, signal?: AbortSignal): Promise<FeedResponse> {
+      const params = new URLSearchParams();
+      if (options.source) params.set('source', options.source);
+      if (options.cursor) params.set('cursor', options.cursor);
+      if (options.limit) params.set('limit', String(options.limit));
+      const query = params.toString();
+      const data = await request<Partial<FeedResponse> | null>(query ? `${apiPaths.feed}?${query}` : apiPaths.feed, { signal });
+      if (!data || !Array.isArray(data.items) || !Array.isArray(data.channels)) throw new ApiError('信源返回格式异常。', 200, 'bad_response');
+      return { items: data.items, channels: data.channels, nextCursor: data.nextCursor ?? null };
+    },
+    /** 信息源页面：全部频道的介绍、抓取频率与最近状态。 */
+    async getFeedChannels(signal?: AbortSignal): Promise<FeedChannelsResponse> {
+      const data = await request<Partial<FeedChannelsResponse> | null>(apiPaths.feedChannels, { signal });
+      if (!data || !Array.isArray(data.channels)) throw new ApiError('信息源列表返回格式异常。', 200, 'bad_response');
+      return { channels: data.channels };
+    },
+    /** 所有者立即抓取：不指定频道时按过期程度抓取一批，指定时只抓这一个。 */
+    async refreshFeed(channel?: string): Promise<FeedRefreshResponse> {
+      return (await postJson(apiPaths.feedRefresh, channel ? { channel } : {})) as FeedRefreshResponse;
     },
     async importReport(input: ImportRequest): Promise<IngestResult> {
       return (await postJson(apiPaths.reports, input)) as IngestResult;

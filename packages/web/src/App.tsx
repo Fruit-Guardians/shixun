@@ -1,20 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { Category, ImportRequest, IngestResult } from '#shared';
-import { createApiClient } from './api/client.ts';
+import type { Category, FeedSource, ImportRequest, IngestResult } from '#shared';
+import { createApiClient, errorMessage } from './api/client.ts';
 import type { ApiClient } from './api/client.ts';
 import BrowseView from './components/BrowseView.tsx';
 import CommandPalette from './components/CommandPalette.tsx';
 import { LoadingState } from './components/EmptyState.tsx';
+import FeedView from './components/FeedView.tsx';
 import ImportDialog from './components/ImportDialog.tsx';
 import ReaderView from './components/ReaderView.tsx';
+import SourcesView from './components/SourcesView.tsx';
 import Sidebar from './components/Sidebar.tsx';
 import SyncDialog from './components/SyncDialog.tsx';
 import { BackToTop, Toast } from './components/Toast.tsx';
 import Topbar from './components/Topbar.tsx';
 import VersionsDialog from './components/VersionsDialog.tsx';
 import { useArchive } from './hooks/useArchive.ts';
+import { useFeed } from './hooks/useFeed.ts';
+import { useFeedChannels } from './hooks/useFeedChannels.ts';
 import { useLocalStore } from './hooks/useLocalStore.ts';
 import { useReportRoute } from './hooks/useReportRoute.ts';
 import { useReportText } from './hooks/useReportText.ts';
@@ -68,6 +72,10 @@ export default function App({ initial, api = defaultApi }: AppProps) {
     [archive.reports, browse, savedIds, fullText.hits],
   );
   const reading = archive.reports.find((r) => r.id === reportId);
+  const [feedSource, setFeedSource] = useState<FeedSource | null>(null);
+  const feed = useFeed(api, browse.view === 'feed' && !reading, feedSource);
+  const [feedRefreshing, setFeedRefreshing] = useState(false);
+  const sources = useFeedChannels(api, browse.view === 'sources' && !reading);
   const readingText = useReportText(api, reading);
 
   // 地址栏颜色跟随配色与明暗。
@@ -185,6 +193,30 @@ export default function App({ initial, api = defaultApi }: AppProps) {
     if (owner && hasFailures) void refresh();
   }, [owner, hasFailures, refresh]);
 
+  const { reload: reloadFeed } = feed;
+  const refreshAllFeeds = useCallback(async () => {
+    setFeedRefreshing(true);
+    try {
+      const { channels } = await api.refreshFeed();
+      const failed = channels.filter((c) => !c.ok).length;
+      // 一次请求的子请求有上限，服务端会按过期程度抓一部分，剩下的交给定时任务。
+      showToast(failed ? `已抓取 ${channels.length} 个频道，其中 ${failed} 个失败` : `已抓取 ${channels.length} 个频道`);
+      reloadFeed();
+    } catch (error) {
+      showToast(errorMessage(error, '信源刷新失败，请稍后重试。'));
+    } finally {
+      setFeedRefreshing(false);
+    }
+  }, [api, reloadFeed, showToast]);
+
+  const openFeedSource = useCallback(
+    (source: FeedSource) => {
+      setFeedSource(source);
+      navigate('feed');
+    },
+    [navigate],
+  );
+
   const changeDensity = useCallback((next: Density) => densityStore.set(next), []);
 
   return (
@@ -233,6 +265,18 @@ export default function App({ initial, api = defaultApi }: AppProps) {
               onCopyLink={copyLink}
               onOpenVersions={() => setModal('versions')}
             />
+          ) : browse.view === 'feed' ? (
+            <FeedView
+              feed={feed}
+              source={feedSource}
+              onSource={setFeedSource}
+              onLoadMore={feed.loadMore}
+              onReload={reloadFeed}
+              onRefreshAll={owner ? refreshAllFeeds : undefined}
+              refreshingAll={feedRefreshing}
+            />
+          ) : browse.view === 'sources' ? (
+            <SourcesView sources={sources} onReload={sources.reload} onOpenSource={openFeedSource} />
           ) : archive.status === 'loading' ? (
             <LoadingState />
           ) : (

@@ -29,10 +29,11 @@ shared ◀── api        api 不得引用 #web / React / Next / cloudflare:wo
 
 ## 后端分层
 ```
-routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, search.ts, sync.ts, credential.ts, health.ts, session.ts）
+routes/        HTTP：解析请求、鉴权、映射状态码   （reports.ts, search.ts, sync.ts, credential.ts, health.ts, session.ts, feed.ts）
                service-errors.ts：ValidationError→400、回读不一致→503、其它→记录日志 + 503
 services/      业务：导入去重、版本历史、归档合并与排序、同步状态   （不知道 HTTP）
 repositories/  SQL：只有这一层写 SQL；列名显式列出   （不知道业务规则）
+feeds/         信源速递：频道列表与调度（channels.ts）、各来源解析（parsers.ts）、文本清洗（text.ts）
 schema.ts      drizzle 表与索引定义，仅用于 `npm run db:generate` 生成 drizzle/ 迁移
 http.ts        HttpError、统一错误响应；所有响应默认带 no-store + nosniff
 auth.ts        平台登录头、所有者名单、程序同步协议、同源检查、常量时间比较
@@ -40,7 +41,17 @@ access.ts      Cloudflare Access JWT 验签（RS256、JWKS 缓存）
 security.ts    整站安全头（CSP、HSTS 等），由 Worker 入口统一加上
 router.ts      极小路由器：路径参数、404、405 + Allow
 ```
-运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`、`AUTH_PROVIDER`、`CF_ACCESS_TEAM_DOMAIN`、`CF_ACCESS_AUD`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
+运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`、`AUTH_PROVIDER`、`CF_ACCESS_TEAM_DOMAIN`、`CF_ACCESS_AUD`、`GITHUB_TOKEN`、`NVD_API_KEY`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
+
+### 信源速递
+- Worker 入口的 `scheduled` 调用 `runScheduledFeed(env, scheduledTime)`：读 `feed_channels` 里各频道上次抓取的时间，按「已过时间 / 频道的 `everyMinutes`」挑出到期且最过期的三个频道（`pickDueChannels`），抓取、解析、写入 `feed_items`，并各记一行状态。热门社区 30 分钟、漏洞库与 Trending 1 小时、博客与版本发布 3 小时、arXiv、周刊与安全研究博客 6 小时、很少更新的博客 1 天，平均每小时约 26 次抓取，低于每小时 36 个名额。
+- 每个频道带分组、一句话介绍和首页（`FeedChannel.group/description/homepage`），`GET /api/feed/channels` 把它们和最近一次抓取的状态一起返回，供「信息源」页面使用。
+- 手动刷新（`POST /api/feed/refresh` 不指定频道）按同样的过期顺序抓取，直到用完一次请求的子请求预算（`FEED_REFRESH_BUDGET` = 40，OSV 每个频道约 9 个子请求：目录 + 8 条详情）。
+- KEV 不下载 1.8MB 的完整目录，而是用 NVD 的 `hasKev` 查询最近 30 天列入的条目；OSV 读各生态 `modified_id.csv` 的开头几十行，再取最新几条的详情，跳过 `MAL-*` 恶意包。
+- 抓取用的 `fetch` 可注入（`createApiHandler({ feedFetch })`、`runScheduledFeed(env, t, fetch)`），测试不出网。
+- 条目 id 是 `<频道>:<来源内 id>`，重复抓到时只在内容有变化时更新（省 D1 写入），保留第一次的 `published_at`（GitHub Trending 即首次上榜时间）。发布时间早于 30 天的条目不入库，已入库的按发布时间清理；但频道会记下源里最新一篇的时间（`feed_channels.latest_at`，失败时保留旧值），很少更新的博客也能看出上次更新是什么时候。跨来源的同一链接不合并。
+- 抓取内容一律当不可信文本：去标签、解码实体、截断；链接只留 http(s)。失败原因只写状态码、超时之类，会公开展示。
+- 解析出 0 条（页面改版）也记为失败；HN、Trending、RSS、Advisory 正常时不会为空，NVD 例外。
 
 查询约定：
 - 单篇下载（Apps Script 每个文件回读一次）只按 id 查一行，不加载整个归档。

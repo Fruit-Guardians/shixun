@@ -44,7 +44,7 @@ router.ts      极小路由器：路径参数、404、405 + Allow
 运行环境绑定（`DB`、`INGEST_TOKEN`、`SITES_SERVICE_ACCESS`、`OWNER_EMAILS`、`AUTH_PROVIDER`、`CF_ACCESS_TEAM_DOMAIN`、`CF_ACCESS_AUD`、`GITHUB_TOKEN`、`NVD_API_KEY`）由宿主在每次请求时传入，API 包不读取任何全局，所以测试里可以直接传入内存 D1。时间也一样：`createApiHandler({ now })` 可注入时钟，每个请求在入口取一次 `now`，业务层不直接调用 `new Date()`。
 
 ### 信源速递
-- Worker 入口的 `scheduled` 调用 `runScheduledFeed(env, scheduledTime)`：读 `feed_channels` 里各频道上次抓取的时间，按「已过时间 / 频道的 `everyMinutes`」挑出到期且最过期的三个频道（`pickDueChannels`），抓取、解析、写入 `feed_items`，并各记一行状态。热门社区 30 分钟、漏洞库与 Trending 1 小时、博客与版本发布 3 小时、arXiv、周刊与安全研究博客 6 小时、很少更新的博客 1 天，平均每小时约 26 次抓取，低于每小时 36 个名额。
+- Worker 入口的 `scheduled` 调用 `runScheduledFeed(env, scheduledTime)`：读 `feed_channels` 里各频道上次抓取的时间，按「已过时间 / 频道的 `everyMinutes`」挑出到期且最过期的四个频道（`pickDueChannels`），抓取、解析、写入 `feed_items`，并各记一行状态。热门社区 30 分钟、漏洞库与 Trending 1 小时、博客与版本发布 3 小时、arXiv、周刊与安全研究博客 6 小时、很少更新的博客 1 天，平均每小时约 37 次抓取，低于每小时 48 个名额。
 - 每个频道带分组、一句话介绍和首页（`FeedChannel.group/description/homepage`），`GET /api/feed/channels` 把它们和最近一次抓取的状态一起返回，供「信息源」页面使用。
 - 手动刷新（`POST /api/feed/refresh` 不指定频道）按同样的过期顺序抓取，直到用完一次请求的子请求预算（`FEED_REFRESH_BUDGET` = 40，OSV 每个频道约 9 个子请求：目录 + 8 条详情）。
 - KEV 不下载 1.8MB 的完整目录，而是用 NVD 的 `hasKev` 查询最近 30 天列入的条目；OSV 读各生态 `modified_id.csv` 的开头几十行，再取最新几条的详情，跳过 `MAL-*` 恶意包。

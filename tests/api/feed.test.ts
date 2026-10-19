@@ -9,6 +9,7 @@ import {
   parseGhsa,
   parseGithubTrending,
   parseHackerNews,
+  parseHfModels,
   parseHfPapers,
   parseKev,
   parseLobsters,
@@ -146,6 +147,14 @@ const hfBody = [
   { paper: { id: 'not-arxiv', title: 'bad' } },
 ];
 
+const hfModelsBody = [
+  { id: 'deepseek-ai/DeepSeek-V4.1-Flash', likes: 1586, downloads: 17924, pipeline_tag: 'image-text-to-text', library_name: 'transformers', createdAt: '2026-10-17T02:40:38.000Z' },
+  { id: 'openbmb/MiniCPM-V-4.7', likes: 1039, createdAt: '2026-10-10T00:00:00.000Z' },
+  // 非法 id、旧模型（超出保留期，不入库）。
+  { id: '../etc/passwd', likes: 1 },
+  { id: 'google/bert-base', likes: 9000, createdAt: '2019-01-01T00:00:00.000Z' },
+];
+
 const weeklyAtom = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
   <entry><id>c1</id><link href="https://github.com/ruanyf/weekly/commit/1"/><title>docs(issue-415): fixed link</title><updated>2026-10-16T01:00:52Z</updated></entry>
   <entry><id>c2</id><link href="https://github.com/ruanyf/weekly/commit/2"/><title>
@@ -177,6 +186,7 @@ function fakeFetch(overrides: Record<string, () => Response> = {}) {
     if (input.startsWith('https://hn.algolia.com/')) return Response.json(hnBody);
     if (input.startsWith('https://lobste.rs/')) return Response.json(lobstersBody);
     if (input.startsWith('https://www.v2ex.com/')) return Response.json(v2exBody);
+    if (input.startsWith('https://huggingface.co/api/models')) return Response.json(hfModelsBody);
     if (input.startsWith('https://huggingface.co/api/')) return Response.json(hfBody);
     if (input.includes('ruanyf/weekly')) return new Response(weeklyAtom);
     if (input.startsWith('https://services.nvd.nist.gov/') && input.includes('hasKev')) return Response.json(kevBody);
@@ -250,6 +260,12 @@ test('Atom: picks the alternate link and the published date', () => {
   assert.deepEqual(parseFeedXml(blogger, 'https://b.test/', NOW).map((d) => [d.url, d.publishedAt]), [['https://b.test/2024/06/uac.html', '2024-06-01T17:00:00.000Z']]);
 });
 
+test('RSS without <link>: an absolute guid is the link, a non-URL guid is skipped', () => {
+  const xml = `<rss><channel><item><guid>https://news.test/post/1</guid><title>有 guid</title></item>
+    <item><guid isPermaLink="false">post-2</guid><title>没有链接</title></item></channel></rss>`;
+  assert.deepEqual(parseFeedXml(xml, 'https://news.test/rss', NOW).map((d) => [d.key, d.url]), [['https://news.test/post/1', 'https://news.test/post/1']]);
+});
+
 test('NVD: keeps scored, non-rejected CVEs; timestamps without a zone are UTC', () => {
   const items = parseNvd(nvdBody(['CVE-2026-0001']), NOW);
   assert.deepEqual(items.map((i) => i.key), ['CVE-2026-0001']);
@@ -288,6 +304,18 @@ test('Lobsters and V2EX: text posts link to the discussion, tags and reply count
   const [topic, ...rest] = parseV2ex(v2exBody, NOW);
   assert.equal(rest.length, 0);
   assert.deepEqual([topic.url, topic.author, topic.tags, topic.publishedAt], ['https://www.v2ex.com/t/1250023', 'joe', ['生活', '163 条回复'], new Date(1792393441 * 1000).toISOString()]);
+});
+
+test('Hugging Face trending models: id, task, framework and likes; invalid ids skipped', async () => {
+  const items = parseHfModels(hfModelsBody, NOW);
+  assert.deepEqual(items.map((i) => i.key), ['deepseek-ai/DeepSeek-V4.1-Flash', 'openbmb/MiniCPM-V-4.7', 'google/bert-base']);
+  assert.deepEqual([items[0].url, items[0].author, items[0].score, items[0].tags], ['https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash', 'deepseek-ai', 1586, ['image-text-to-text', 'transformers']]);
+  assert.match(items[0].summary, /近 30 天下载 17,924 次/);
+  assert.equal(items[1].summary, '');
+  const DB = createTestD1();
+  const status = await runOne(DB, 'hf-models', fakeFetch().fetcher);
+  assert.deepEqual([status.ok, status.fetched, status.latestAt], [true, 3, '2026-10-17T02:40:38.000Z']);
+  assert.equal(countItems({ DB }), 2);
 });
 
 test('Hugging Face papers and the weekly: arXiv ids, upvotes, released issues only', () => {
@@ -416,11 +444,12 @@ test('scheduled runs fetch the due channels and record each one', async () => {
     ['hackernews', true, 3],
     ['hackernews-show', true, 3],
     ['lobsters', true, 2],
+    ['v2ex', true, 1],
   ]);
   assert.match(String(new Headers(calls[0].init?.headers).get('user-agent')), /^shixun-feed\//);
   // 下一次触发轮到还没抓过的。
   const next = await runScheduledFeed({ DB }, NOW.getTime() + FEED_CRON_INTERVAL_MS, fetcher);
-  assert.deepEqual(next?.map((c) => c.id), ['v2ex', 'github-trending', 'release-react']);
+  assert.deepEqual(next?.map((c) => c.id), ['github-trending', 'release-react', 'release-next-js', 'release-bun']);
   assert.equal(await runScheduledFeed({}, NOW.getTime(), fetcher), null);
 });
 
@@ -523,7 +552,7 @@ test('GET /api/feed pages newest first, filters by source and lists every channe
 
   // 一次刷新受子请求预算限制，抓不完就再刷新一次；每次先抓最久没更新的。
   const fetched = new Set<string>();
-  for (let round = 0; round < 4 && fetched.size < FEED_CHANNELS.length; round++) {
+  for (let round = 0; round < 7 && fetched.size < FEED_CHANNELS.length; round++) {
     const refreshed = await h.call(apiPaths.feedRefresh, { method: 'POST', headers: { authorization: 'Bearer ingest-test' } });
     assert.equal(refreshed.status, 200);
     const { channels } = (await refreshed.json()) as FeedRefreshResponse;

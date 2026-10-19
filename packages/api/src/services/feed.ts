@@ -8,6 +8,7 @@ import {
   parseGhsa,
   parseGithubTrending,
   parseHackerNews,
+  parseHfModels,
   parseHfPapers,
   parseKev,
   parseLobsters,
@@ -122,6 +123,8 @@ export async function fetchChannel(channel: FeedChannel, deps: FeedDeps): Promis
       return parseV2ex(parseJson(await get(deps, channel.url, JSON_ACCEPT)), deps.now);
     case 'hf-papers':
       return parseHfPapers(parseJson(await get(deps, channel.url, JSON_ACCEPT)), deps.now);
+    case 'hf-models':
+      return parseHfModels(parseJson(await get(deps, channel.url, JSON_ACCEPT)), deps.now);
     case 'github-trending':
       return parseGithubTrending(await get(deps, channel.url, { Accept: 'text/html' }), deps.now);
     case 'feed':

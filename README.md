@@ -37,11 +37,15 @@ Grok 每天写一份 Markdown 技术日报放进 Google Drive，拾讯把它原�
   - 浅色/深色主题
   - 稍后阅读（保存在本机）
   - 下载原文和历史版本
-- **信源速递**：Workers Cron 每 5 分钟抓取最该更新的三个公开频道（各频道有自己的刷新间隔），独立成一个信息流，可按来源筛选。「信息源」页面按分组列出全部 68 个频道的介绍、首页、抓取频率和最近状态。
+- **信源速递**：Workers Cron 每 5 分钟抓取最该更新的四个公开频道（各频道有自己的刷新间隔），独立成一个信息流，可按来源筛选。「信息源」页面按分组列出全部 138 个频道的介绍、首页、抓取频率和最近状态。
   - 社区：Hacker News 首页与 Show HN、Lobsters、V2EX 热门。
-  - GitHub：Trending，以及 React、Next.js、Bun、vLLM、Ollama 的版本发布。
-  - 论文：Hugging Face Daily Papers、arXiv cs.AI/CL/LG。
-  - 博客：8 个技术与安全新闻博客，以及阮一峰的网络日志、科技爱好者周刊、InfoQ 中文、少数派。
+  - GitHub：Trending，以及 React、Next.js、Bun、vLLM、Ollama、llama.cpp、Transformers、Deno、Vite、Kubernetes、Rust、Python、Linux 内核的版本发布。
+  - 论文与模型：Hugging Face Daily Papers 与热门模型、arXiv cs.AI/CL/LG/CR/SE。
+  - AI 研究：DeepMind、Google Research、微软研究院、PyTorch、Together AI，以及 Import AI、Latent Space、Interconnects、Sebastian Raschka、Lilian Weng、Karpathy。
+  - 工程博客：Netflix、Meta、Stripe、Discord、Dropbox、Fly.io、Tailscale，以及 Pragmatic Engineer、Martin Fowler、Julia Evans、Dan Luu。
+  - 平台与周刊：Rust、Go、Python、Node.js、TypeScript、Kubernetes、Chromium、Vercel 官方博客；This Week in Rust、JavaScript Weekly、Golang Weekly、GitHub Changelog、AWS 新功能、Product Hunt。
+  - 博客与中文：8 个技术与安全新闻博客；阮一峰的网络日志、科技爱好者周刊、InfoQ 中文、少数派、美团技术团队、Solidot、开源中国、IT 之家、爱范儿、极客公园、小众软件、Tw93、HelloGitHub。
+  - 安全资讯：BleepingComputer、Schneier、Risky Business、oss-security、Full Disclosure、Exploit-DB、CERT/CC、CISA、Chrome 发布、Debian 与 Ubuntu 安全通告、安全客、先知社区、嘶吼。
   - 安全研究：37 个研究博客，分 10 组（Web、二进制与浏览器、Windows 与 AD、云、威胁情报、移动与硬件、供应链、密码学、AI 安全、旧文精读），如 PortSwigger、Project Zero、watchTowr、Trail of Bits、腾讯科恩与玄武。
   - 漏洞：CISA KEV（在野利用）、NVD 高危/严重 CVE、GitHub Advisory、OSV（PyPI、npm、Go、crates.io）。
   - 不调用任何模型，只去掉 HTML、只保留 http(s) 链接；条目保留 30 天。频道列表在 [channels.ts](packages/api/src/feeds/channels.ts)。

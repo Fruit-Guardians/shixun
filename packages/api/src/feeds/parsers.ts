@@ -144,9 +144,11 @@ export function parseFeedXml(xml: string, base: string, now: Date, options: { ti
   return finish(
     blocks.flatMap((block): FeedDraft[] => {
       const title = clip(withPrefix(plainText(tagText(block, 'title') ?? '', TITLE_CHARS), options.titlePrefix), TITLE_CHARS);
-      const link = safeUrl(tagText(block, 'link') ?? atomLink(block), base);
+      const guid = tagText(block, 'guid');
+      // 没有 <link> 的 RSS（如安全客）按规范用绝对地址形式的 guid 作为原文链接。
+      const link = safeUrl(tagText(block, 'link') ?? atomLink(block), base) ?? (guid && /^https?:\/\//i.test(guid.trim()) ? safeUrl(guid) : null);
       if (!title || !link) return [];
-      const id = tagText(block, 'guid') ?? tagText(block, 'id') ?? link;
+      const id = guid ?? tagText(block, 'id') ?? link;
       const body = tagText(block, 'description') ?? tagText(block, 'summary') ?? tagText(block, 'content:encoded') ?? tagText(block, 'content') ?? '';
       const authorBlock = tagText(block, 'author');
       const author = tagText(block, 'dc:creator') ?? (authorBlock ? (tagText(authorBlock, 'name') ?? authorBlock) : null);
@@ -378,6 +380,37 @@ export function parseHfPapers(body: unknown, now: Date): FeedDraft[] {
           severity: null,
           tags: [`arXiv ${id}`, ...(repo?.startsWith('https://github.com/') ? ['有代码'] : []), ...(comments ? [`${comments} 条评论`] : [])],
           publishedAt: normalizeTime(str(paper.submittedOnDailyAt) ?? str(entry.publishedAt), now),
+        },
+      ];
+    }),
+  );
+}
+
+const HF_MODEL_ID = /^[\w.-]+\/[\w.-]+$/;
+
+/** Hugging Face 热门模型（`/api/models?sort=trendingScore`）：得分是点赞数，发布时间是模型仓库的创建时间。 */
+export function parseHfModels(body: unknown, now: Date): FeedDraft[] {
+  const list = Array.isArray(body) ? body : [];
+  return finish(
+    list.flatMap((value): FeedDraft[] => {
+      const model = record(value);
+      const id = str(model.id) ?? str(model.modelId);
+      if (!id || !HF_MODEL_ID.test(id)) return [];
+      const task = str(model.pipeline_tag);
+      const library = str(model.library_name);
+      const downloads = num(model.downloads);
+      return [
+        {
+          key: id,
+          title: clip(id, TITLE_CHARS),
+          url: `https://huggingface.co/${id}`,
+          discussionUrl: null,
+          summary: [task && `任务：${task}`, library && `框架：${library}`, downloads !== null && `近 30 天下载 ${downloads.toLocaleString('en-US')} 次`].filter(Boolean).join(' · '),
+          author: id.split('/')[0],
+          score: num(model.likes),
+          severity: null,
+          tags: [task, library].filter((t): t is string => Boolean(t)),
+          publishedAt: normalizeTime(str(model.createdAt), now),
         },
       ];
     }),

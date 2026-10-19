@@ -31,15 +31,20 @@ export const MAX_LISTED_VERSIONS = 50;
 export const MAX_SEARCH_CHARS = 100;
 
 /** 信源速递的来源种类；顺序即界面筛选顺序。 */
-export const FEED_SOURCES = ['hackernews', 'lobsters', 'v2ex', 'github', 'releases', 'papers', 'rss', 'zh', 'security', 'kev', 'nvd', 'ghsa', 'osv'] as const;
+export const FEED_SOURCES = ['hackernews', 'lobsters', 'v2ex', 'github', 'releases', 'papers', 'ai', 'engineering', 'rss', 'zh', 'secnews', 'security', 'kev', 'nvd', 'ghsa', 'osv'] as const;
 /** 信息源页面上频道的分组；顺序即页面顺序。sec-* 是安全研究博客的细分方向。 */
 export const FEED_GROUPS = [
   'community',
   'github',
   'papers',
+  'ai',
   'blogs',
+  'engineering',
+  'platforms',
+  'weekly',
   'zh',
   'vulns',
+  'sec-news',
   'sec-web',
   'sec-binary',
   'sec-windows',

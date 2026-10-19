@@ -1,7 +1,7 @@
 import type { FeedGroup, FeedSource } from '#shared';
 
 /** 每个频道用哪种解析方式。 */
-export type FeedParser = 'hackernews' | 'github-trending' | 'feed' | 'ruanyf-weekly' | 'lobsters' | 'v2ex' | 'hf-papers' | 'nvd' | 'kev' | 'ghsa' | 'osv';
+export type FeedParser = 'hackernews' | 'github-trending' | 'feed' | 'ruanyf-weekly' | 'lobsters' | 'v2ex' | 'hf-papers' | 'hf-models' | 'nvd' | 'kev' | 'ghsa' | 'osv';
 
 export interface FeedChannel {
   id: string;
@@ -46,7 +46,12 @@ function security(id: string, group: FeedGroup, name: string, url: string, homep
 }
 const archive = { everyMinutes: 24 * HOUR };
 
-function releases(repo: string, name: string, description: string): FeedChannel {
+/** 周更、月更的博客与周刊：半天看一次。 */
+const slow = { everyMinutes: 12 * HOUR, mayBeEmpty: true };
+/** 一天几十条的资讯站。 */
+const busy = { everyMinutes: 3 * HOUR };
+
+function releases(repo: string, name: string, description: string, everyMinutes = 3 * HOUR): FeedChannel {
   return {
     id: `release-${repo.split('/')[1].replace(/\W+/g, '-').toLowerCase()}`,
     source: 'releases',
@@ -56,7 +61,7 @@ function releases(repo: string, name: string, description: string): FeedChannel 
     homepage: `https://github.com/${repo}/releases`,
     parser: 'feed',
     url: `https://github.com/${repo}/releases.atom`,
-    everyMinutes: 3 * HOUR,
+    everyMinutes,
     mayBeEmpty: true,
     titlePrefix: name,
   };
@@ -81,7 +86,7 @@ function osv(ecosystem: string, name: string): FeedChannel {
  * 全部频道，按信息源页面的展示顺序排列。
  * 定时任务每 5 分钟触发一次，每次只抓最该更新的 FEED_CHANNELS_PER_RUN 个（见 pickDueChannels），
  * 单次调用的子请求很少（Workers 免费版每次调用上限 50 个）。
- * 按 everyMinutes 算，平均每小时约 26 次抓取，低于每小时 36 个名额。
+ * 按 everyMinutes 算，平均每小时约 37 次抓取，低于每小时 48 个名额；最坏情况（4 个 OSV 频道）约 36 个子请求。
  */
 export const FEED_CHANNELS: readonly FeedChannel[] = [
   // —— 社区 ——
@@ -147,6 +152,17 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
   releases('oven-sh/bun', 'Bun', 'Bun 运行时的版本发布。'),
   releases('vllm-project/vllm', 'vLLM', 'vLLM 推理引擎的版本发布。'),
   releases('ollama/ollama', 'Ollama', 'Ollama 本地模型运行器的版本发布。'),
+  releases('ggml-org/llama.cpp', 'llama.cpp', 'llama.cpp 的构建发布，几乎每天都有。', 6 * HOUR),
+  releases('huggingface/transformers', 'Transformers', 'Hugging Face Transformers 的版本说明，新模型支持一般先出现在这里。', 6 * HOUR),
+  releases('denoland/deno', 'Deno', 'Deno 运行时的版本发布。', 6 * HOUR),
+  releases('vitejs/vite', 'Vite', 'Vite 及其插件的版本发布。', 6 * HOUR),
+  releases('kubernetes/kubernetes', 'Kubernetes', 'Kubernetes 的正式版与补丁版本。', 6 * HOUR),
+  releases('rust-lang/rust', 'Rust', 'Rust 编译器与工具链的版本发布。', 6 * HOUR),
+  {
+    ...feed('release-python', 'releases', 'github', 'Python Releases', 'https://www.python.org/downloads/feed.rss', 'https://www.python.org/downloads/', 'CPython 的正式版、预发布与安全修复版本。', { everyMinutes: 6 * HOUR, mayBeEmpty: true }),
+    titlePrefix: 'Python',
+  },
+  feed('release-linux', 'releases', 'github', 'Linux 内核发布', 'https://www.kernel.org/feeds/kdist.xml', 'https://www.kernel.org/', 'kernel.org 的主线、稳定版与长期支持版内核发布。', { everyMinutes: 6 * HOUR, mayBeEmpty: true }),
   // —— 论文 ——
   {
     id: 'hf-papers',
@@ -170,6 +186,32 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
     // 每天几百篇、1.5MB 以上；只收前 30 篇，读前 200KB 就够了。周末没有新论文。
     { everyMinutes: 6 * HOUR, mayBeEmpty: true, maxBytes: 200_000 },
   ),
+  feed('arxiv-cr', 'papers', 'papers', 'arXiv cs.CR', 'https://rss.arxiv.org/rss/cs.CR', 'https://arxiv.org/list/cs.CR/new', 'arXiv 密码学与安全分类的每日新论文。', { everyMinutes: 6 * HOUR, mayBeEmpty: true, maxBytes: 200_000 }),
+  feed('arxiv-se', 'papers', 'papers', 'arXiv cs.SE', 'https://rss.arxiv.org/rss/cs.SE', 'https://arxiv.org/list/cs.SE/new', 'arXiv 软件工程分类的每日新论文。', { everyMinutes: 6 * HOUR, mayBeEmpty: true, maxBytes: 200_000 }),
+  {
+    id: 'hf-models',
+    source: 'papers',
+    group: 'papers',
+    name: 'Hugging Face 热门模型',
+    description: 'Hugging Face 上热度最高的模型，附任务类型、框架与点赞数；只收最近 30 天创建的。',
+    homepage: 'https://huggingface.co/models?sort=trending',
+    parser: 'hf-models',
+    url: 'https://huggingface.co/api/models?sort=trendingScore&limit=30',
+    everyMinutes: 2 * HOUR,
+    mayBeEmpty: true,
+  },
+  // —— AI 实验室与研究博客 ——
+  feed('ai-deepmind', 'ai', 'ai', 'Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'https://deepmind.google/discover/blog/', 'Gemini、AlphaFold 等模型与研究的官方发布。', slow),
+  feed('ai-google-research', 'ai', 'ai', 'Google Research', 'https://research.google/blog/rss/', 'https://research.google/blog/', 'Google 研究院的论文解读，覆盖机器学习、系统与量子计算。', slow),
+  feed('ai-msr', 'ai', 'ai', 'Microsoft Research', 'https://www.microsoft.com/en-us/research/feed/', 'https://www.microsoft.com/en-us/research/blog/', '微软研究院的研究进展与论文介绍。', slow),
+  feed('ai-pytorch', 'ai', 'ai', 'PyTorch Blog', 'https://pytorch.org/feed/', 'https://pytorch.org/blog/', 'PyTorch 版本、编译器与分布式训练的技术文章。', slow),
+  feed('ai-together', 'ai', 'ai', 'Together AI', 'https://www.together.ai/blog/rss.xml', 'https://www.together.ai/blog', '开源模型推理、训练与内核优化（FlashAttention 团队）。', slow),
+  feed('ai-importai', 'ai', 'ai', 'Import AI', 'https://importai.substack.com/feed', 'https://jack-clark.net/', 'Jack Clark 的每周 AI 研究与政策简报。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('ai-latentspace', 'ai', 'ai', 'Latent Space', 'https://www.latent.space/feed', 'https://www.latent.space/', '面向 AI 工程师的访谈与行业综述。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('ai-interconnects', 'ai', 'ai', 'Interconnects', 'https://www.interconnects.ai/feed', 'https://www.interconnects.ai/', 'Nathan Lambert 谈后训练、RLHF 与开源模型。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('ai-raschka', 'ai', 'ai', 'Ahead of AI · Sebastian Raschka', 'https://magazine.sebastianraschka.com/feed', 'https://magazine.sebastianraschka.com/', 'LLM 架构与训练方法的长文解读。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('ai-lilianweng', 'ai', 'ai', "Lil'Log · Lilian Weng", 'https://lilianweng.github.io/index.xml', 'https://lilianweng.github.io/', '机器学习主题的系统性综述长文，更新很少。', archive),
+  feed('ai-karpathy', 'ai', 'ai', 'Andrej Karpathy', 'https://karpathy.bearblog.dev/feed/', 'https://karpathy.bearblog.dev/', 'Karpathy 的个人博客，谈 LLM 与软件的变化。', archive),
   // —— 技术博客 ——
   feed('rss-cloudflare', 'rss', 'blogs', 'Cloudflare Blog', 'https://blog.cloudflare.com/rss/', 'https://blog.cloudflare.com/', '网络、边缘计算与 Workers 平台的工程文章和事故复盘。'),
   feed('rss-github-blog', 'rss', 'blogs', 'GitHub Blog', 'https://github.blog/feed/', 'https://github.blog/', 'GitHub 产品更新、工程实践与开源动态。'),
@@ -179,6 +221,35 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
   feed('rss-lwn', 'rss', 'blogs', 'LWN.net', 'https://lwn.net/headlines/rss', 'https://lwn.net/', 'Linux 内核与开源社区的深度报道。'),
   feed('rss-thehackernews', 'rss', 'blogs', 'The Hacker News', 'https://feeds.feedburner.com/TheHackersNews', 'https://thehackernews.com/', '每日安全新闻：漏洞、攻击活动与数据泄露。'),
   feed('rss-krebs', 'rss', 'blogs', 'Krebs on Security', 'https://krebsonsecurity.com/feed/', 'https://krebsonsecurity.com/', '网络犯罪调查报道。'),
+  // —— 公司工程博客与个人技术博客 ——
+  feed('eng-netflix', 'engineering', 'engineering', 'Netflix TechBlog', 'https://netflixtechblog.com/feed', 'https://netflixtechblog.com/', '大规模流媒体的基础设施、数据与机器学习实践。', slow),
+  feed('eng-meta', 'engineering', 'engineering', 'Engineering at Meta', 'https://engineering.fb.com/feed/', 'https://engineering.fb.com/', 'Meta 的基础设施、AI 系统与开源项目。', slow),
+  feed('eng-stripe', 'engineering', 'engineering', 'Stripe Blog', 'https://stripe.com/blog/feed.rss', 'https://stripe.com/blog', '支付基础设施与工程文化。', slow),
+  feed('eng-discord', 'engineering', 'engineering', 'Discord Blog', 'https://discord.com/blog/rss.xml', 'https://discord.com/blog', 'Discord 的工程与产品文章（混有社区公告）。', slow),
+  feed('eng-dropbox', 'engineering', 'engineering', 'Dropbox Tech', 'https://dropbox.tech/feed', 'https://dropbox.tech/', '存储、同步引擎与基础设施的工程实践。', slow),
+  feed('eng-flyio', 'engineering', 'engineering', 'Fly.io Blog', 'https://fly.io/blog/feed.xml', 'https://fly.io/blog/', '边缘部署、Firecracker 与分布式系统，写得很有趣。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('eng-tailscale', 'engineering', 'engineering', 'Tailscale Blog', 'https://tailscale.com/blog/index.xml', 'https://tailscale.com/blog', 'WireGuard、NAT 穿透与零信任网络。', slow),
+  feed('eng-pragmatic', 'engineering', 'engineering', 'The Pragmatic Engineer', 'https://newsletter.pragmaticengineer.com/feed', 'https://newsletter.pragmaticengineer.com/', 'Gergely Orosz 谈大厂工程实践与行业变化（部分付费）。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('eng-fowler', 'engineering', 'engineering', 'Martin Fowler', 'https://martinfowler.com/feed.atom', 'https://martinfowler.com/', '软件架构、重构与 AI 辅助开发的文章。', slow),
+  feed('eng-jvns', 'engineering', 'engineering', 'Julia Evans', 'https://jvns.ca/atom.xml', 'https://jvns.ca/', '把 Linux、网络、Git 讲明白的小文章与漫画。', slow),
+  feed('eng-danluu', 'engineering', 'engineering', 'Dan Luu', 'https://danluu.com/atom.xml', 'https://danluu.com/', '数据驱动的长文：性能、可靠性与工程决策。', { ...archive, maxBytes: LARGE_FEED_BYTES }),
+  // —— 语言、浏览器与平台官方博客 ——
+  feed('lang-rust', 'rss', 'platforms', 'Rust Blog', 'https://blog.rust-lang.org/feed.xml', 'https://blog.rust-lang.org/', 'Rust 版本发布与项目治理的官方公告。', slow),
+  feed('lang-go', 'rss', 'platforms', 'The Go Blog', 'https://go.dev/blog/feed.atom', 'https://go.dev/blog/', 'Go 团队的版本介绍与语言设计文章。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('lang-python', 'rss', 'platforms', 'Python Insider', 'https://pythoninsider.blogspot.com/feeds/posts/summary', 'https://pythoninsider.blogspot.com/', 'CPython 核心开发团队的发布与公告。', slow),
+  feed('lang-nodejs', 'rss', 'platforms', 'Node.js Blog', 'https://nodejs.org/en/feed/blog.xml', 'https://nodejs.org/en/blog', 'Node.js 版本发布与安全公告。', slow),
+  feed('lang-typescript', 'rss', 'platforms', 'TypeScript Blog', 'https://devblogs.microsoft.com/typescript/feed/', 'https://devblogs.microsoft.com/typescript/', 'TypeScript 新版本的特性说明。', slow),
+  feed('plat-kubernetes', 'rss', 'platforms', 'Kubernetes Blog', 'https://kubernetes.io/feed.xml', 'https://kubernetes.io/blog/', 'Kubernetes 版本亮点、SIG 动态与功能深入介绍。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('plat-chromium', 'rss', 'platforms', 'Chromium Blog', 'https://blog.chromium.org/feeds/posts/summary', 'https://blog.chromium.org/', 'Chrome 新特性、Web 平台与安全改进。', slow),
+  // 全站更新日志有一千多条、近 4MB，只读开头。
+  feed('plat-vercel', 'rss', 'platforms', 'Vercel 更新', 'https://vercel.com/atom', 'https://vercel.com/changelog', 'Vercel 平台与 Next.js 生态的博客和更新日志。', { ...slow, maxBytes: 200_000 }),
+  // —— 周刊、更新日志与新产品 ——
+  feed('weekly-twir', 'rss', 'weekly', 'This Week in Rust', 'https://this-week-in-rust.org/rss.xml', 'https://this-week-in-rust.org/', 'Rust 社区每周精选文章、新库与 RFC 进展。', slow),
+  feed('weekly-js', 'rss', 'weekly', 'JavaScript Weekly', 'https://javascriptweekly.com/rss/', 'https://javascriptweekly.com/', 'JavaScript 生态的每周精选。', slow),
+  feed('weekly-go', 'rss', 'weekly', 'Golang Weekly', 'https://cprss.s3.amazonaws.com/golangweekly.com.xml', 'https://golangweekly.com/', 'Go 生态的每周精选。', slow),
+  feed('weekly-gh-changelog', 'rss', 'weekly', 'GitHub Changelog', 'https://github.blog/changelog/feed/', 'https://github.blog/changelog/', 'GitHub 功能上线与变更记录。', busy),
+  feed('weekly-aws', 'rss', 'weekly', "AWS What's New", 'https://aws.amazon.com/about-aws/whats-new/recent/feed/', 'https://aws.amazon.com/new/', 'AWS 新服务与功能发布，每天十几条。', busy),
+  feed('weekly-producthunt', 'rss', 'weekly', 'Product Hunt', 'https://www.producthunt.com/feed', 'https://www.producthunt.com/', '每天新上线的产品。', busy),
   // —— 中文 ——
   // 阮一峰博客本站对抓取返回质询页，用 feedburner 上的同步源。
   feed('zh-ruanyf', 'zh', 'zh', '阮一峰的网络日志', 'https://feeds.feedburner.com/ruanyifeng', 'https://www.ruanyifeng.com/blog/', '科技爱好者周刊与技术随笔。'),
@@ -196,6 +267,15 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
   },
   feed('zh-infoq', 'zh', 'zh', 'InfoQ 中文', 'https://www.infoq.cn/feed', 'https://www.infoq.cn/', '架构、AI 工程与行业动态的中文报道。'),
   feed('zh-sspai', 'zh', 'zh', '少数派', 'https://sspai.com/feed', 'https://sspai.com/', '数字产品、效率工具与生活方式。'),
+  feed('zh-meituan', 'zh', 'zh', '美团技术团队', 'https://tech.meituan.com/feed/', 'https://tech.meituan.com/', '美团的后端、算法与基础设施实践。', slow),
+  feed('zh-solidot', 'zh', 'zh', 'Solidot', 'https://www.solidot.org/index.rss', 'https://www.solidot.org/', '奇客的资讯：科技、开源与科学短讯。', busy),
+  feed('zh-oschina', 'zh', 'zh', '开源中国', 'https://www.oschina.net/news/rss', 'https://www.oschina.net/news', '开源项目发布与国内开源动态。', busy),
+  feed('zh-ithome', 'zh', 'zh', 'IT之家', 'https://www.ithome.com/rss/', 'https://www.ithome.com/', '数码与科技快讯，更新很频繁。', busy),
+  feed('zh-ifanr', 'zh', 'zh', '爱范儿', 'https://www.ifanr.com/feed', 'https://www.ifanr.com/', '科技产品与商业报道。', { ...busy, maxBytes: LARGE_FEED_BYTES }),
+  feed('zh-geekpark', 'zh', 'zh', '极客公园', 'https://www.geekpark.net/rss', 'https://www.geekpark.net/', '科技公司、AI 产品与创业报道。', { ...busy, maxBytes: LARGE_FEED_BYTES }),
+  feed('zh-appinn', 'zh', 'zh', '小众软件', 'https://www.appinn.com/feed/', 'https://www.appinn.com/', '实用软件、浏览器扩展与在线工具推荐。', slow),
+  feed('zh-tw93', 'zh', 'zh', '潮流周刊 · Tw93', 'https://weekly.tw93.fun/rss.xml', 'https://weekly.tw93.fun/', '前端工程师 Tw93 的每周技术与工具分享。', slow),
+  feed('zh-hellogithub', 'zh', 'zh', 'HelloGitHub 月刊', 'https://hellogithub.com/rss', 'https://hellogithub.com/', '每月推荐有趣、入门级的开源项目。', archive),
   // —— 漏洞情报 ——
   {
     id: 'kev',
@@ -236,6 +316,21 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
   osv('npm', 'npm'),
   osv('Go', 'Go'),
   osv('crates.io', 'Rust (crates.io)'),
+  // —— 安全资讯、通告与邮件列表 ——
+  feed('secnews-bleeping', 'secnews', 'sec-news', 'BleepingComputer', 'https://www.bleepingcomputer.com/feed/', 'https://www.bleepingcomputer.com/', '勒索软件、数据泄露与漏洞利用的新闻报道。', busy),
+  feed('secnews-schneier', 'secnews', 'sec-news', 'Schneier on Security', 'https://www.schneier.com/feed/atom/', 'https://www.schneier.com/', 'Bruce Schneier 对安全、隐私与政策的评论。', slow),
+  feed('secnews-risky', 'secnews', 'sec-news', 'Risky Bulletin', 'https://risky.biz/feeds/risky-business-news/', 'https://risky.biz/', 'Risky Business 团队每天的安全新闻简报。', busy),
+  feed('secnews-oss-security', 'secnews', 'sec-news', 'oss-security 邮件列表', 'https://seclists.org/rss/oss-sec.rss', 'https://www.openwall.com/lists/oss-security/', '开源软件漏洞的披露与讨论，很多 CVE 最早出现在这里。', busy),
+  feed('secnews-fulldisclosure', 'secnews', 'sec-news', 'Full Disclosure', 'https://seclists.org/rss/fulldisclosure.rss', 'https://seclists.org/fulldisclosure/', '公开的漏洞披露邮件列表，常附 PoC。', busy),
+  feed('secnews-exploitdb', 'secnews', 'sec-news', 'Exploit-DB', 'https://www.exploit-db.com/rss.xml', 'https://www.exploit-db.com/', '公开漏洞利用代码库的新收录。', busy),
+  feed('secnews-certcc', 'secnews', 'sec-news', 'CERT/CC 漏洞说明', 'https://kb.cert.org/vuls/atomfeed/', 'https://kb.cert.org/vuls/', 'CERT/CC 协调披露的漏洞说明（VU#），常涉及多家厂商。', slow),
+  feed('secnews-cisa', 'secnews', 'sec-news', 'CISA 安全通告', 'https://www.cisa.gov/cybersecurity-advisories/all.xml', 'https://www.cisa.gov/news-events/cybersecurity-advisories', 'CISA 的工控系统通告、联合通告与威胁分析。', { ...slow, maxBytes: LARGE_FEED_BYTES }),
+  feed('secnews-chrome', 'secnews', 'sec-news', 'Chrome Releases', 'https://chromereleases.googleblog.com/feeds/posts/summary', 'https://chromereleases.googleblog.com/', 'Chrome 各渠道版本更新，含修复的安全漏洞列表。', busy),
+  feed('secnews-debian', 'secnews', 'sec-news', 'Debian 安全公告', 'https://www.debian.org/security/dsa', 'https://www.debian.org/security/', 'Debian 发行版的安全更新（DSA）。', busy),
+  feed('secnews-ubuntu', 'secnews', 'sec-news', 'Ubuntu 安全公告', 'https://ubuntu.com/security/notices/rss.xml', 'https://ubuntu.com/security/notices', 'Ubuntu 的安全更新（USN）。', slow),
+  feed('secnews-anquanke', 'secnews', 'sec-news', '安全客', 'https://api.anquanke.com/data/v1/rss', 'https://www.anquanke.com/', '360 旗下的中文安全资讯与技术文章。', busy),
+  feed('secnews-xz', 'secnews', 'sec-news', '先知社区', 'https://xz.aliyun.com/feed', 'https://xz.aliyun.com/', '阿里云先知的中文漏洞分析与渗透技术文章。', busy),
+  feed('secnews-4hou', 'secnews', 'sec-news', '嘶吼', 'https://www.4hou.com/feed', 'https://www.4hou.com/', '中文安全资讯与技术文章；近期更新较少。', archive),
   // —— 安全研究：Web 安全、代码审计、漏洞挖掘 ——
   security('portswigger', 'sec-web', 'PortSwigger Research', 'https://portswigger.net/research/rss', 'https://portswigger.net/research', '请求走私、XSS、缓存投毒、认证机制等新的 Web 攻击面，适合发现新思路。'),
   security('doyensec', 'sec-web', 'Doyensec', 'https://blog.doyensec.com/atom.xml', 'https://blog.doyensec.com/', 'Web、Electron 与业务逻辑审计，也有系统安全研究，贴近审计工作。', { maxBytes: LARGE_FEED_BYTES }),
@@ -292,7 +387,7 @@ export const FEED_CHANNELS: readonly FeedChannel[] = [
 /** 与 wrangler.cloudflare.jsonc 里的 cron（每 5 分钟）一致。 */
 export const FEED_CRON_INTERVAL_MS = 5 * 60 * 1000;
 /** 每次定时触发最多抓几个频道。 */
-export const FEED_CHANNELS_PER_RUN = 3;
+export const FEED_CHANNELS_PER_RUN = 4;
 /** OSV 频道每次最多取几条详情。 */
 export const OSV_DETAILS_PER_RUN = 8;
 

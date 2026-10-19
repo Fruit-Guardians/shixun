@@ -155,7 +155,7 @@ export default function FeedView({ feed, source, onSource, onLoadMore, onReload,
         <div className="empty-state">
           <pre aria-hidden="true">{'> tail: no entries yet'}</pre>
           <h2>{source ? '这个来源暂时没有条目' : '信源还没有抓取过'}</h2>
-          <p>定时任务每 5 分钟抓取最该更新的三个频道，部署后几个小时内全部频道都会抓取一遍。</p>
+          <p>定时任务每 5 分钟抓取最该更新的四个频道，部署后几个小时内全部频道都会抓取一遍。</p>
         </div>
       )}
 
